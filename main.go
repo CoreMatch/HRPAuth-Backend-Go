@@ -1,0 +1,119 @@
+package main
+
+import (
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/lnb/HRPAuth-Backend-Go/config"
+	"github.com/lnb/HRPAuth-Backend-Go/controllers"
+	"github.com/lnb/HRPAuth-Backend-Go/database"
+)
+
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "https://auth.samuelcheston.com")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func main() {
+	config.Load()
+	database.Init()
+
+	r := gin.Default()
+
+	r.Use(CORSMiddleware())
+
+	authCtrl := controllers.NewAuthController()
+	userCtrl := controllers.NewUserController()
+	totpCtrl := controllers.NewTOTPController()
+	emailCtrl := controllers.NewEmailVerificationController()
+	keygenCtrl := controllers.NewKeyGenController()
+	yggdrasilCtrl := controllers.NewYggdrasilController()
+
+	r.GET("/status", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "online",
+			"backend": gin.H{
+				"name":        config.AppConfig.Site.Name,
+				"url":         config.AppConfig.Callback.URL,
+				"version":     config.AppConfig.Site.Version,
+				"go_version":  "go1.26",
+				"server_time": time.Now().Format("2006-01-02 15:04:05"),
+			},
+			"message": "HRPAuth Backend is running.",
+		})
+	})
+
+	api := r.Group("")
+	{
+		api.POST("/login", authCtrl.Login)
+		api.POST("/register", authCtrl.Register)
+		api.GET("/logout", authCtrl.Logout)
+		api.POST("/user", userCtrl.GetUser)
+
+		api.POST("/email-verification", emailCtrl.Handle)
+
+		api.GET("/totpgen", totpCtrl.Generate)
+		api.POST("/totp/setup", totpCtrl.SetupTOTP)
+		api.POST("/totp/verify", totpCtrl.VerifyTOTP)
+
+		api.POST("/change-username", userCtrl.ChangeUsername)
+
+		api.POST("/generate-key", keygenCtrl.Generate)
+	}
+
+	yggdrasil := r.Group("")
+	{
+		yggdrasil.GET("/", yggdrasilCtrl.Meta)
+
+		yggdrasil.POST("/authserver/authenticate", yggdrasilCtrl.Authenticate)
+		yggdrasil.POST("/authserver/refresh", yggdrasilCtrl.Refresh)
+		yggdrasil.POST("/authserver/validate", yggdrasilCtrl.Validate)
+		yggdrasil.POST("/authserver/invalidate", yggdrasilCtrl.Invalidate)
+		yggdrasil.POST("/authserver/signout", yggdrasilCtrl.Signout)
+
+		yggdrasil.POST("/sessionserver/session/minecraft/join", yggdrasilCtrl.Join)
+		yggdrasil.GET("/sessionserver/session/minecraft/hasjoined", yggdrasilCtrl.HasJoined)
+		yggdrasil.GET("/sessionserver/session/minecraft/profile/:uuid", yggdrasilCtrl.ProfileQuery)
+
+		yggdrasil.POST("/api/profiles/minecraft", yggdrasilCtrl.BatchProfiles)
+
+		yggdrasil.PUT("/api/user/profile/:uuid/skin", yggdrasilCtrl.UploadTexture)
+		yggdrasil.DELETE("/api/user/profile/:uuid/cape", yggdrasilCtrl.DeleteTexture)
+		yggdrasil.PUT("/api/user/profile/:uuid/cape", yggdrasilCtrl.UploadTexture)
+		yggdrasil.DELETE("/api/user/profile/:uuid/skin", yggdrasilCtrl.DeleteTexture)
+	}
+
+	r.NoRoute(func(c *gin.Context) {
+		path := strings.ToLower(c.Request.URL.Path)
+		if strings.Contains(path, "authserver") ||
+			strings.Contains(path, "sessionserver") ||
+			strings.Contains(path, "/api/") ||
+			strings.Contains(path, "/api/user/profile") {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":        "Not Found",
+				"errorMessage": "The requested endpoint does not exist.",
+				"cause":        nil,
+			})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "Not Found",
+		})
+	})
+
+	r.Run(":8080")
+}

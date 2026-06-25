@@ -1,0 +1,242 @@
+package controllers
+
+import (
+	"net/http"
+	"net/mail"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/lnb/HRPAuth-Backend-Go/database"
+	"github.com/lnb/HRPAuth-Backend-Go/models"
+	"github.com/lnb/HRPAuth-Backend-Go/utils"
+)
+
+type AuthController struct{}
+
+func NewAuthController() *AuthController {
+	return &AuthController{}
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type LogoutRequest struct {
+	RememberToken string `json:"remember_token"`
+}
+
+func isValidEmail(email string) bool {
+	_, err := mail.ParseAddress(email)
+	return err == nil
+}
+
+func (ac *AuthController) Login(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid request body",
+		})
+		return
+	}
+
+	email := req.Email
+	password := req.Password
+
+	if !isValidEmail(email) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid email",
+		})
+		return
+	}
+
+	var user models.User
+	result := database.DB.Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Email or password incorrect",
+		})
+		return
+	}
+
+	if !utils.CheckPasswordHash(password, user.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Email or password incorrect",
+		})
+		return
+	}
+
+	token := utils.GenerateRandomToken(32)
+	now := time.Now()
+
+	database.DB.Model(&user).Updates(map[string]interface{}{
+		"remember_token": token,
+		"last_sign_at":   now,
+	})
+
+	totp := 0
+	if user.TOTP != "" {
+		totp = 1
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Login successful",
+		"token":   token,
+		"uid":     user.UID,
+		"totp":    totp,
+	})
+}
+
+func (ac *AuthController) Register(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid request body",
+		})
+		return
+	}
+
+	email := req.Email
+	username := req.Username
+	password := req.Password
+
+	if !isValidEmail(email) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid email",
+		})
+		return
+	}
+
+	if len(username) < 3 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Username too short",
+		})
+		return
+	}
+
+	if len(password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Password too short",
+		})
+		return
+	}
+
+	var count int64
+	database.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "Email already registered",
+		})
+		return
+	}
+
+	database.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "Username already taken",
+		})
+		return
+	}
+
+	hash, err := utils.HashPassword(password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Password hashing failed",
+		})
+		return
+	}
+
+	ip := c.ClientIP()
+	now := time.Now()
+	verificationToken := utils.GenerateRandomToken(16)
+	uuid := utils.GenerateUnsignedUUID()
+
+	var maxUID uint
+	database.DB.Model(&models.User{}).Select("COALESCE(MAX(uid), 0)").Scan(&maxUID)
+	newUID := maxUID + 1
+
+	user := models.User{
+		UID:               newUID,
+		UUID:              uuid,
+		Email:             email,
+		Username:          username,
+		Password:          hash,
+		IP:                ip,
+		RegIP:             ip,
+		LastSignAt:        &now,
+		RegisterAt:        &now,
+		Score:             1000,
+		Verified:          false,
+		VerificationToken: verificationToken,
+		RegDate:           now.Unix(),
+	}
+
+	result := database.DB.Create(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to create user",
+		})
+		return
+	}
+
+	profileID := utils.GenerateUnsignedUUID()
+	profile := models.Profile{
+		ID:     profileID,
+		UserID: uuid,
+		Name:   username,
+		Model:  "default",
+	}
+	database.DB.Create(&profile)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"uid":     user.UID,
+		"message": "Register successful",
+	})
+}
+
+func (ac *AuthController) Logout(c *gin.Context) {
+	token := ""
+
+	var req LogoutRequest
+	if err := c.ShouldBindJSON(&req); err == nil && req.RememberToken != "" {
+		token = req.RememberToken
+	}
+
+	if token == "" {
+		token = c.PostForm("remember_token")
+	}
+	if token == "" {
+		token = c.Query("remember_token")
+	}
+
+	if token != "" {
+		database.DB.Model(&models.User{}).
+			Where("remember_token = ?", token).
+			Update("remember_token", nil)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Logout successful",
+	})
+}

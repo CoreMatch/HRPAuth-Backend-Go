@@ -1,0 +1,396 @@
+package controllers
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/lnb/HRPAuth-Backend-Go/config"
+	"github.com/lnb/HRPAuth-Backend-Go/services"
+	"github.com/lnb/HRPAuth-Backend-Go/utils"
+)
+
+type YggdrasilController struct {
+	authService *services.AuthService
+}
+
+func NewYggdrasilController() *YggdrasilController {
+	return &YggdrasilController{
+		authService: services.NewAuthService(),
+	}
+}
+
+type AgentInfo struct {
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+}
+
+type AuthenticateRequest struct {
+	Username     string    `json:"username"`
+	Password     string    `json:"password"`
+	Agent        AgentInfo `json:"agent"`
+	ClientToken  string    `json:"clientToken"`
+	RequestUser  bool      `json:"requestUser"`
+}
+
+type RefreshRequest struct {
+	AccessToken     string `json:"accessToken"`
+	ClientToken     string `json:"clientToken"`
+	SelectedProfile *struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"selectedProfile"`
+	RequestUser bool `json:"requestUser"`
+}
+
+type ValidateRequest struct {
+	AccessToken string `json:"accessToken"`
+	ClientToken string `json:"clientToken"`
+}
+
+type InvalidateRequest struct {
+	AccessToken string `json:"accessToken"`
+	ClientToken string `json:"clientToken"`
+}
+
+type SignoutRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type JoinRequest struct {
+	AccessToken     string `json:"accessToken"`
+	SelectedProfile string `json:"selectedProfile"`
+	ServerID        string `json:"serverId"`
+}
+
+func sendYggdrasilError(c *gin.Context, errType, errMessage string, statusCode int) {
+	c.JSON(statusCode, gin.H{
+		"error":        errType,
+		"errorMessage": errMessage,
+		"cause":        nil,
+	})
+}
+
+func (yc *YggdrasilController) Meta(c *gin.Context) {
+	cfg := config.AppConfig.Yggdrasil.Server
+	frontendURL := config.AppConfig.Frontend.URL
+
+	links := gin.H{
+		"homepage": frontendURL,
+		"register": strings.TrimRight(frontendURL, "/") + "/register",
+	}
+
+	skinDomains := []string{
+		utils.ExtractDomain(config.AppConfig.Callback.URL),
+		"." + utils.ExtractDomain(config.AppConfig.Callback.URL),
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"meta": gin.H{
+			"serverName":       cfg.Name,
+			"implementationName": cfg.Implementation,
+			"version": map[string]string{
+				"name":     cfg.Name,
+				"version":  cfg.Version,
+			},
+			"links": links,
+			"skinDomains": skinDomains,
+			"feature.non_email_login": config.AppConfig.Yggdrasil.FeatureFlags.NonEmailLogin,
+			"feature.legacy_skin_api": config.AppConfig.Yggdrasil.FeatureFlags.LegacySkinAPI,
+			"feature.no_mojang_namespace": config.AppConfig.Yggdrasil.FeatureFlags.NoMojangNamespace,
+			"feature.enable_mojang_anti_features": config.AppConfig.Yggdrasil.FeatureFlags.EnableMojangAntiFeatures,
+			"feature.enable_profile_key": config.AppConfig.Yggdrasil.FeatureFlags.EnableProfileKey,
+			"feature.username_check": config.AppConfig.Yggdrasil.FeatureFlags.UsernameCheck,
+		},
+		"skinDomains": skinDomains,
+		"signaturePublickey": cfg.SignaturePublicKey,
+	})
+}
+
+func (yc *YggdrasilController) Authenticate(c *gin.Context) {
+	var req AuthenticateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" || req.Agent.Name == "" {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
+		return
+	}
+
+	user := yc.authService.VerifyCredentials(req.Username, req.Password, false)
+	if user == nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
+		return
+	}
+
+	profiles := yc.authService.GetUserProfiles(user.UUID)
+	if len(profiles) == 0 {
+		sendYggdrasilError(c, "ForbiddenOperationException", "User has no profiles.", http.StatusForbidden)
+		return
+	}
+
+	clientToken := req.ClientToken
+	if clientToken == "" {
+		clientToken = utils.GenerateClientToken()
+	}
+
+	accessToken := utils.GenerateAccessToken()
+	selectedProfile := profiles[0]
+	expiresInDays := config.AppConfig.Yggdrasil.Security.TokenExpiryDays
+
+	if !yc.authService.CreateToken(accessToken, clientToken, user.UUID, selectedProfile.ID, expiresInDays) {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Failed to create session. Please try again.", http.StatusForbidden)
+		return
+	}
+
+	response := gin.H{
+		"accessToken":       accessToken,
+		"clientToken":       clientToken,
+		"availableProfiles": profiles,
+		"selectedProfile":   selectedProfile,
+	}
+
+	if req.RequestUser {
+		userProperties := make([]gin.H, 0)
+		if user.Locale != "" {
+			userProperties = append(userProperties, gin.H{
+				"name":  "locale",
+				"value": user.Locale,
+			})
+		}
+
+		response["user"] = gin.H{
+			"id":         user.UUID,
+			"email":      user.Email,
+			"username":   user.Username,
+			"properties": userProperties,
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (yc *YggdrasilController) Refresh(c *gin.Context) {
+	var req RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	token := yc.authService.ValidateToken(req.AccessToken, req.ClientToken)
+	if token == nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	profiles := yc.authService.GetUserProfiles(token.UserID)
+	if len(profiles) == 0 {
+		sendYggdrasilError(c, "ForbiddenOperationException", "User has no profiles.", http.StatusForbidden)
+		return
+	}
+
+	newAccessToken := utils.GenerateAccessToken()
+	yc.authService.InvalidateToken(req.AccessToken)
+
+	selectedProfileID := token.SelectedProfileID
+	if req.SelectedProfile != nil {
+		if yc.authService.IsProfileOwnedByUser(req.SelectedProfile.ID, token.UserID) {
+			selectedProfileID = req.SelectedProfile.ID
+		}
+	}
+
+	var selectedProfile *services.ProfileInfo
+	for _, p := range profiles {
+		if p.ID == selectedProfileID {
+			selectedProfile = &p
+			break
+		}
+	}
+	if selectedProfile == nil {
+		selectedProfile = &profiles[0]
+	}
+
+	expiresInDays := config.AppConfig.Yggdrasil.Security.TokenExpiryDays
+	yc.authService.CreateToken(newAccessToken, req.ClientToken, token.UserID, selectedProfile.ID, expiresInDays)
+
+	response := gin.H{
+		"accessToken":       newAccessToken,
+		"clientToken":       req.ClientToken,
+		"availableProfiles": profiles,
+		"selectedProfile":   selectedProfile,
+	}
+
+	if req.RequestUser {
+		var user services.UserInfo
+		response["user"] = user
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (yc *YggdrasilController) Validate(c *gin.Context) {
+	var req ValidateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	token := yc.authService.ValidateToken(req.AccessToken, req.ClientToken)
+	if token == nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (yc *YggdrasilController) Invalidate(c *gin.Context) {
+	var req InvalidateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	yc.authService.InvalidateToken(req.AccessToken)
+	c.Status(http.StatusNoContent)
+}
+
+func (yc *YggdrasilController) Signout(c *gin.Context) {
+	var req SignoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
+		return
+	}
+
+	user := yc.authService.VerifyCredentials(req.Username, req.Password, false)
+	if user == nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (yc *YggdrasilController) Join(c *gin.Context) {
+	var req JoinRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	token := yc.authService.ValidateToken(req.AccessToken, "")
+	if token == nil {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
+		return
+	}
+
+	if req.SelectedProfile != token.SelectedProfileID {
+		if !yc.authService.IsProfileOwnedByUser(req.SelectedProfile, token.UserID) {
+			sendYggdrasilError(c, "ForbiddenOperationException", "Invalid profile.", http.StatusForbidden)
+			return
+		}
+	}
+
+	ip := c.ClientIP()
+	if !yc.authService.CreateSession(req.SelectedProfile, req.ServerID, ip) {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Failed to create session.", http.StatusForbidden)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (yc *YggdrasilController) HasJoined(c *gin.Context) {
+	username := c.Query("username")
+	serverID := c.Query("serverId")
+	ip := c.Query("ip")
+
+	if username == "" || serverID == "" {
+		sendYggdrasilError(c, "BadRequestException", "Bad request.", http.StatusBadRequest)
+		return
+	}
+
+	profile := yc.authService.GetProfileByName(username)
+	if profile == nil {
+		c.JSON(http.StatusOK, gin.H{})
+		return
+	}
+
+	session := yc.authService.GetSessionByProfileAndServer(username, serverID)
+	if session == nil {
+		c.JSON(http.StatusOK, gin.H{})
+		return
+	}
+
+	if ip != "" && session.IP != ip {
+		c.JSON(http.StatusOK, gin.H{})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":   profile.ID,
+		"name": profile.Name,
+		"properties": []gin.H{},
+	})
+}
+
+func (yc *YggdrasilController) ProfileQuery(c *gin.Context) {
+	uuid := c.Param("uuid")
+	if uuid == "" {
+		sendYggdrasilError(c, "BadRequestException", "Bad request.", http.StatusBadRequest)
+		return
+	}
+
+	profile := yc.authService.GetProfileByID(uuid)
+	if profile == nil {
+		sendYggdrasilError(c, "ProfileNotFoundException", "No such profile.", http.StatusNotFound)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":   profile.ID,
+		"name": profile.Name,
+		"properties": []gin.H{},
+	})
+}
+
+type BatchProfileRequest struct {
+	Names []string `json:"names"`
+}
+
+func (yc *YggdrasilController) BatchProfiles(c *gin.Context) {
+	var req BatchProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendYggdrasilError(c, "BadRequestException", "Bad request.", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Names) == 0 {
+		c.JSON(http.StatusOK, []gin.H{})
+		return
+	}
+
+	result := make([]gin.H, 0)
+	for _, name := range req.Names {
+		profile := yc.authService.GetProfileByName(name)
+		if profile != nil {
+			result = append(result, gin.H{
+				"id":   profile.ID,
+				"name": profile.Name,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (yc *YggdrasilController) UploadTexture(c *gin.Context) {
+	sendYggdrasilError(c, "UnsupportedOperationException", "Texture upload is not implemented.", http.StatusNotImplemented)
+}
+
+func (yc *YggdrasilController) DeleteTexture(c *gin.Context) {
+	sendYggdrasilError(c, "UnsupportedOperationException", "Texture delete is not implemented.", http.StatusNotImplemented)
+}
