@@ -1,0 +1,55 @@
+callback:
+    url: https://hrpauth.samuelcheston.com/
+database:
+    charset: utf8mb4
+    db_name: hrpa
+    host: 192.168.1.124
+    password: hrpa
+    user: hrpa
+frontend:
+    url: https://auth.samuelcheston.com/
+keygen:
+    enable: 0
+memcache:
+    code_ttl: 600
+    host: 127.0.0.1
+    port: 11211
+    prefix: hrpauth_
+    storage_dir: ./cache/verification_codes
+server:
+    cors_origin: https://auth.samuelcheston.com
+    port: :8080
+site:
+    implementation: HRPAuth zggdrasil-api service
+    name: HRPAuth
+    version: "5526"
+smtp:
+    encryption: tls
+    from_email: no-reply@samuelcheston.com
+    from_name: HRPAuth
+    host: 127.0.0.1
+    password: ""
+    port: 25
+    username: ""
+version: "1.0"
+yggdrasil:
+    feature_flags:
+        enable_mojang_anti_features: false
+        enable_profile_key: false
+        legacy_skin_api: true
+        no_mojang_namespace: false
+        non_email_login: true
+        username_check: true
+    security:
+        password_cost: 10
+        session_expiry_seconds: 30
+        token_expiry_days: 15
+    server:
+        implementation: HRPAuth zggdrasil-api service
+        links:
+            homepage: ""
+            register: ""
+        name: HRPAuth
+        signature_public_key: ""
+        skin_domains: []
+        version: "5526"

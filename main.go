@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "https://auth.samuelcheston.com")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", config.AppConfig.Server.CORSOrigin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -28,6 +29,12 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
+	// Initialize startup controller to check/create config file
+	startupCtrl := controllers.NewStartupController()
+	if err := startupCtrl.InitializeConfig(); err != nil {
+		log.Fatalf("Failed to initialize config: %v", err)
+	}
+
 	config.Load()
 	database.Init()
 
@@ -115,5 +122,5 @@ func main() {
 		})
 	})
 
-	r.Run(":8080")
+	r.Run(config.AppConfig.Server.Port)
 }
