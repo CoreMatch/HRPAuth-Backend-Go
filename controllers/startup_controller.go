@@ -37,14 +37,14 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 		"site": map[string]interface{}{
 			"name":           "HRPAuth",
 			"implementation": "HRPAuth zggdrasil-api service",
-			"version":        "5526",
+			"version":        "62526",
 		},
 		"server": map[string]interface{}{
-			"port":        ":8080",
+			"port":        ":2778",
 			"cors_origin": "https://auth.samuelcheston.com",
 		},
 		"callback": map[string]interface{}{
-			"url": "https://hrpauth.samuelcheston.com/",
+			"url": "https://backend.auth.samuelcheston.com/",
 		},
 		"frontend": map[string]interface{}{
 			"url": "https://auth.samuelcheston.com/",
