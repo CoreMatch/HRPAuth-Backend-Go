@@ -10,6 +10,7 @@ import (
 	"github.com/lnb/HRPAuth-Backend-Go/config"
 	"github.com/lnb/HRPAuth-Backend-Go/controllers"
 	"github.com/lnb/HRPAuth-Backend-Go/database"
+	"github.com/lnb/HRPAuth-Backend-Go/redis"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -37,6 +38,7 @@ func main() {
 
 	config.Load()
 	database.Init()
+	redis.Init()
 
 	r := gin.Default()
 

@@ -75,6 +75,13 @@ func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath st
 			"code_ttl":    600,
 			"storage_dir": "./cache/verification_codes",
 		},
+		"redis": map[string]interface{}{
+			"host":     "127.0.0.1",
+			"port":     6379,
+			"password": "",
+			"db":       0,
+			"prefix":   "hrpauth_",
+		},
 		"smtp": map[string]interface{}{
 			"host":       "127.0.0.1",
 			"port":       25,

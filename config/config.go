@@ -17,6 +17,7 @@ type Config struct {
 	KeyGen    KeyGenConfig
 	Database  DatabaseConfig
 	Memcache  MemcacheConfig
+	Redis     RedisConfig
 	SMTP      SMTPConfig
 	Yggdrasil YggdrasilConfig
 }
@@ -58,6 +59,14 @@ type MemcacheConfig struct {
 	Prefix     string
 	CodeTTL    int
 	StorageDir string
+}
+
+type RedisConfig struct {
+	Host     string
+	Port     int
+	Password string
+	DB       int
+	Prefix   string
 }
 
 type SMTPConfig struct {
@@ -149,6 +158,7 @@ func Load() {
 		KeyGen:    parseKeyGenConfig(yamlConfig),
 		Database:  parseDatabaseConfig(yamlConfig),
 		Memcache:  parseMemcacheConfig(yamlConfig),
+		Redis:     parseRedisConfig(yamlConfig),
 		SMTP:      parseSMTPConfig(yamlConfig),
 		Yggdrasil: parseYggdrasilConfig(yamlConfig),
 	}
@@ -213,6 +223,17 @@ func parseMemcacheConfig(config map[string]interface{}) MemcacheConfig {
 		Prefix:     getString(memcache, "prefix"),
 		CodeTTL:    getInt(memcache, "code_ttl"),
 		StorageDir: getString(memcache, "storage_dir"),
+	}
+}
+
+func parseRedisConfig(config map[string]interface{}) RedisConfig {
+	redis, _ := config["redis"].(map[string]interface{})
+	return RedisConfig{
+		Host:     getString(redis, "host"),
+		Port:     getInt(redis, "port"),
+		Password: getString(redis, "password"),
+		DB:       getInt(redis, "db"),
+		Prefix:   getString(redis, "prefix"),
 	}
 }
 
