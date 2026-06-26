@@ -10,11 +10,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lnb/HRPAuth-Backend-Go/config"
+
 	"gopkg.in/yaml.v3"
 )
-
-const ConfigFileName = "config.yaml"
-const ConfigFileDir = "./"
 
 type StartupController struct{}
 
@@ -23,7 +22,7 @@ func NewStartupController() *StartupController {
 }
 
 func (sc *StartupController) InitializeConfig() error {
-	configPath := filepath.Join(ConfigFileDir, ConfigFileName)
+	configPath := filepath.Join(config.ConfigFileDir, config.ConfigFileName)
 
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -36,10 +35,10 @@ func (sc *StartupController) InitializeConfig() error {
 }
 
 func (sc *StartupController) createDefaultConfig(path string) error {
-	configDir := filepath.Dir(path)
+	cfgDir := filepath.Dir(path)
 
-	publicKeyPath := filepath.Join(configDir, "public_key.pem")
-	privateKeyPath := filepath.Join(configDir, "private_key.pem")
+	publicKeyPath := filepath.Join(cfgDir, "public_key.pem")
+	privateKeyPath := filepath.Join(cfgDir, "private_key.pem")
 
 	if err := sc.generateKeyPair(publicKeyPath, privateKeyPath); err != nil {
 		log.Printf("Warning: Failed to generate RSA key pair: %v", err)
@@ -49,9 +48,8 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 		}
 	}
 
-	ConfigVersion := 0
 	defaultConfig := map[string]interface{}{
-		"version": ConfigVersion,
+		"version": config.ConfigVersion,
 		"site": map[string]interface{}{
 			"name":           "HRPAuth",
 			"implementation": "HRPAuth zggdrasil-api service",
