@@ -82,21 +82,22 @@ func (yc *YggdrasilController) Meta(c *gin.Context) {
 		"register": strings.TrimRight(frontendURL, "/") + "/register",
 	}
 
-	skinDomains := []string{
-		utils.ExtractDomain(config.AppConfig.Callback.URL),
-		"." + utils.ExtractDomain(config.AppConfig.Callback.URL),
+	skinDomains := cfg.SkinDomains
+	if len(skinDomains) == 0 {
+		skinDomains = []string{
+			utils.ExtractDomain(config.AppConfig.Callback.URL),
+			"." + utils.ExtractDomain(config.AppConfig.Callback.URL),
+		}
 	}
+
+	c.Header("X-Authlib-Injector-API-Location", "/")
 
 	c.JSON(http.StatusOK, gin.H{
 		"meta": gin.H{
-			"serverName":       cfg.Name,
-			"implementationName": cfg.Implementation,
-			"version": map[string]string{
-				"name":     cfg.Name,
-				"version":  cfg.Version,
-			},
-			"links": links,
-			"skinDomains": skinDomains,
+			"serverName":              cfg.Name,
+			"implementationName":      cfg.Implementation,
+			"implementationVersion":   cfg.Version,
+			"links":                   links,
 			"feature.non_email_login": config.AppConfig.Yggdrasil.FeatureFlags.NonEmailLogin,
 			"feature.legacy_skin_api": config.AppConfig.Yggdrasil.FeatureFlags.LegacySkinAPI,
 			"feature.no_mojang_namespace": config.AppConfig.Yggdrasil.FeatureFlags.NoMojangNamespace,
@@ -104,7 +105,7 @@ func (yc *YggdrasilController) Meta(c *gin.Context) {
 			"feature.enable_profile_key": config.AppConfig.Yggdrasil.FeatureFlags.EnableProfileKey,
 			"feature.username_check": config.AppConfig.Yggdrasil.FeatureFlags.UsernameCheck,
 		},
-		"skinDomains": skinDomains,
+		"skinDomains":       skinDomains,
 		"signaturePublickey": cfg.SignaturePublicKey,
 	})
 }
@@ -121,11 +122,19 @@ func (yc *YggdrasilController) Authenticate(c *gin.Context) {
 		return
 	}
 
+	if yc.authService.IsLoginRateLimited(req.Username) {
+		sendYggdrasilError(c, "ForbiddenOperationException", "Too many login attempts. Please try again later.", http.StatusForbidden)
+		return
+	}
+
 	user := yc.authService.VerifyCredentials(req.Username, req.Password, false)
 	if user == nil {
+		yc.authService.RecordLoginAttempt(req.Username, false)
 		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
 		return
 	}
+
+	yc.authService.RecordLoginAttempt(req.Username, true)
 
 	profiles := yc.authService.GetUserProfiles(user.UUID)
 	if len(profiles) == 0 {
@@ -141,6 +150,18 @@ func (yc *YggdrasilController) Authenticate(c *gin.Context) {
 	accessToken := utils.GenerateAccessToken()
 	selectedProfile := profiles[0]
 	expiresInDays := config.AppConfig.Yggdrasil.Security.TokenExpiryDays
+
+	if config.AppConfig.Yggdrasil.FeatureFlags.NonEmailLogin {
+		profileByName := yc.authService.GetProfileByName(req.Username)
+		if profileByName != nil && profileByName.UserID == user.UUID {
+			for _, p := range profiles {
+				if p.ID == profileByName.ID {
+					selectedProfile = p
+					break
+				}
+			}
+		}
+	}
 
 	if !yc.authService.CreateToken(accessToken, clientToken, user.UUID, selectedProfile.ID, expiresInDays) {
 		sendYggdrasilError(c, "ForbiddenOperationException", "Failed to create session. Please try again.", http.StatusForbidden)
@@ -225,8 +246,22 @@ func (yc *YggdrasilController) Refresh(c *gin.Context) {
 	}
 
 	if req.RequestUser {
-		var user services.UserInfo
-		response["user"] = user
+		user := yc.authService.GetUserByID(token.UserID)
+		if user != nil {
+			userProperties := make([]gin.H, 0)
+			if user.Locale != "" {
+				userProperties = append(userProperties, gin.H{
+					"name":  "locale",
+					"value": user.Locale,
+				})
+			}
+			response["user"] = gin.H{
+				"id":         user.UUID,
+				"email":      user.Email,
+				"username":   user.Username,
+				"properties": userProperties,
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -271,6 +306,8 @@ func (yc *YggdrasilController) Signout(c *gin.Context) {
 		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid credentials.", http.StatusForbidden)
 		return
 	}
+
+	yc.authService.InvalidateAllUserTokens(user.UUID)
 
 	c.Status(http.StatusNoContent)
 }

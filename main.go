@@ -95,6 +95,7 @@ func main() {
 		yggdrasil.POST("/authserver/signout", yggdrasilCtrl.Signout)
 
 		yggdrasil.POST("/sessionserver/session/minecraft/join", yggdrasilCtrl.Join)
+		yggdrasil.GET("/sessionserver/session/minecraft/hasJoined", yggdrasilCtrl.HasJoined)
 		yggdrasil.GET("/sessionserver/session/minecraft/hasjoined", yggdrasilCtrl.HasJoined)
 		yggdrasil.GET("/sessionserver/session/minecraft/profile/:uuid", yggdrasilCtrl.ProfileQuery)
 

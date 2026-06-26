@@ -352,6 +352,24 @@ func (ts *TextureService) GetProfileProperties(profileID string, unsigned bool) 
 		return nil, fmt.Errorf("failed to get profile properties: %v", result.Error)
 	}
 
+	hasUploadable := false
+	for _, p := range props {
+		if p.Name == "uploadableTextures" {
+			hasUploadable = true
+			break
+		}
+	}
+
+	if !hasUploadable {
+		uploadable := models.ProfileProperty{
+			ProfileID: profileID,
+			Name:      "uploadableTextures",
+			Value:     "skin,cape",
+			Signature: "",
+		}
+		props = append(props, uploadable)
+	}
+
 	if unsigned {
 		for i := range props {
 			props[i].Signature = ""

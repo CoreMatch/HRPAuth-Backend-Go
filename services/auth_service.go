@@ -1,11 +1,15 @@
 package services
 
 import (
+	"context"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/lnb/HRPAuth-Backend-Go/config"
 	"github.com/lnb/HRPAuth-Backend-Go/database"
 	"github.com/lnb/HRPAuth-Backend-Go/models"
+	"github.com/lnb/HRPAuth-Backend-Go/redis"
 	"github.com/lnb/HRPAuth-Backend-Go/utils"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -104,6 +108,13 @@ func (as *AuthService) InvalidateToken(accessToken string) bool {
 	return result.Error == nil
 }
 
+func (as *AuthService) InvalidateAllUserTokens(userID string) bool {
+	result := database.DB.Model(&models.Token{}).
+		Where("user_id = ? AND state = ?", userID, "valid").
+		Update("state", "invalid")
+	return result.Error == nil
+}
+
 func (as *AuthService) ValidateToken(accessToken string, clientToken string) *models.Token {
 	var token models.Token
 	result := database.DB.Where("access_token = ? AND state = ?", accessToken, "valid").First(&token)
@@ -112,6 +123,13 @@ func (as *AuthService) ValidateToken(accessToken string, clientToken string) *mo
 	}
 
 	if clientToken != "" && clientToken != token.ClientToken {
+		return nil
+	}
+
+	nowMillis := utils.CurrentTimestampMillis()
+	expiryMillis := token.IssuedAt + int64(token.ExpiresInDays)*24*60*60*1000
+	if nowMillis > expiryMillis {
+		as.InvalidateToken(accessToken)
 		return nil
 	}
 
@@ -172,6 +190,57 @@ func (as *AuthService) GetSessionByProfileAndServer(profileName, serverID string
 		return nil
 	}
 	return &session
+}
+
+func (as *AuthService) IsLoginRateLimited(identifier string) bool {
+	cfg := config.AppConfig.Yggdrasil.Security
+	key := fmt.Sprintf("%slogin_attempts:%s", config.AppConfig.Redis.Prefix, identifier)
+
+	ctx := context.Background()
+	countStr, err := redis.Client.Get(ctx, key).Result()
+	if err != nil {
+		return false
+	}
+
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return false
+	}
+
+	return count >= cfg.RateLimitMaxAttempts
+}
+
+func (as *AuthService) RecordLoginAttempt(identifier string, success bool) {
+	cfg := config.AppConfig.Yggdrasil.Security
+	key := fmt.Sprintf("%slogin_attempts:%s", config.AppConfig.Redis.Prefix, identifier)
+	window := time.Duration(cfg.RateLimitWindowSec) * time.Second
+
+	ctx := context.Background()
+
+	if success {
+		redis.Client.Del(ctx, key)
+		return
+	}
+
+	pipe := redis.Client.TxPipeline()
+	pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, window)
+	_, _ = pipe.Exec(ctx)
+}
+
+func (as *AuthService) GetUserByID(userUUID string) *UserInfo {
+	var user models.User
+	result := database.DB.Where("uuid = ?", userUUID).First(&user)
+	if result.Error != nil {
+		return nil
+	}
+
+	return &UserInfo{
+		UUID:     user.UUID,
+		Email:    user.Email,
+		Username: user.Username,
+		Locale:   user.Locale,
+	}
 }
 
 func (as *AuthService) GetProfileByName(name string) *models.Profile {

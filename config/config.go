@@ -104,6 +104,10 @@ type SecurityConfig struct {
 	TokenExpiryDays      int
 	SessionExpirySeconds int
 	PasswordCost         int
+	RateLimitMaxAttempts int
+	RateLimitWindowSec   int
+	MaxTextureWidth      int
+	MaxTextureHeight     int
 }
 
 type FeatureFlagsConfig struct {
@@ -308,10 +312,20 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 
 func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
 	security, _ := config["security"].(map[string]interface{})
+	maxAttempts := getInt(security, "rate_limit_max_attempts")
+	if maxAttempts == 0 {
+		maxAttempts = 10
+	}
+	windowSec := getInt(security, "rate_limit_window_sec")
+	if windowSec == 0 {
+		windowSec = 600
+	}
 	return SecurityConfig{
 		TokenExpiryDays:      getInt(security, "token_expiry_days"),
 		SessionExpirySeconds: getInt(security, "session_expiry_seconds"),
 		PasswordCost:         getInt(security, "password_cost"),
+		RateLimitMaxAttempts: maxAttempts,
+		RateLimitWindowSec:   windowSec,
 	}
 }
 
