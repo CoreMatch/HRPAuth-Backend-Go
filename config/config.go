@@ -320,12 +320,22 @@ func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
 	if windowSec == 0 {
 		windowSec = 600
 	}
+	maxTextureWidth := getInt(security, "max_texture_width")
+	if maxTextureWidth == 0 {
+		maxTextureWidth = 1024
+	}
+	maxTextureHeight := getInt(security, "max_texture_height")
+	if maxTextureHeight == 0 {
+		maxTextureHeight = 1024
+	}
 	return SecurityConfig{
 		TokenExpiryDays:      getInt(security, "token_expiry_days"),
 		SessionExpirySeconds: getInt(security, "session_expiry_seconds"),
 		PasswordCost:         getInt(security, "password_cost"),
 		RateLimitMaxAttempts: maxAttempts,
 		RateLimitWindowSec:   windowSec,
+		MaxTextureWidth:      maxTextureWidth,
+		MaxTextureHeight:     maxTextureHeight,
 	}
 }
 

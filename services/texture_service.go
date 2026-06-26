@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -50,7 +51,14 @@ type TexturesPayload struct {
 }
 
 func (ts *TextureService) ValidateTexture(file io.Reader, textureType string, model string) ([]byte, error) {
-	img, format, err := image.Decode(file)
+	cfg := config.AppConfig.Yggdrasil.Security
+	maxWidth := cfg.MaxTextureWidth
+	maxHeight := cfg.MaxTextureHeight
+
+	buf := new(bytes.Buffer)
+	teeReader := io.TeeReader(file, buf)
+
+	config, format, err := image.DecodeConfig(teeReader)
 	if err != nil {
 		return nil, fmt.Errorf("invalid image format: %v", err)
 	}
@@ -59,32 +67,44 @@ func (ts *TextureService) ValidateTexture(file io.Reader, textureType string, mo
 		return nil, fmt.Errorf("texture must be PNG format")
 	}
 
+	width := config.Width
+	height := config.Height
+
+	if width > maxWidth || height > maxHeight {
+		return nil, fmt.Errorf("texture size %dx%d exceeds maximum allowed size %dx%d", width, height, maxWidth, maxHeight)
+	}
+
+	img, _, err := image.Decode(io.MultiReader(buf, teeReader))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode texture: %v", err)
+	}
+
 	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
+	actualWidth := bounds.Dx()
+	actualHeight := bounds.Dy()
 
 	switch textureType {
 	case "skin":
-		if !isValidSkinSize(width, height) {
-			return nil, fmt.Errorf("invalid skin size: %dx%d, must be 64x32 or 64x64", width, height)
+		if !isValidSkinSize(actualWidth, actualHeight) {
+			return nil, fmt.Errorf("invalid skin size: %dx%d, must be 64x32 or 64x64", actualWidth, actualHeight)
 		}
 	case "cape":
-		if !isValidCapeSize(width, height) {
-			return nil, fmt.Errorf("invalid cape size: %dx%d, must be 64x32 or 22x17", width, height)
+		if !isValidCapeSize(actualWidth, actualHeight) {
+			return nil, fmt.Errorf("invalid cape size: %dx%d, must be 64x32 or 22x17", actualWidth, actualHeight)
 		}
-		if width == 22 && height == 17 {
+		if actualWidth == 22 && actualHeight == 17 {
 			img = resizeCapeToStandard(img)
 		}
 	default:
 		return nil, fmt.Errorf("invalid texture type: %s", textureType)
 	}
 
-	buf := new(strings.Builder)
-	if err := png.Encode(buf, img); err != nil {
+	resultBuf := new(bytes.Buffer)
+	if err := png.Encode(resultBuf, img); err != nil {
 		return nil, fmt.Errorf("failed to re-encode texture: %v", err)
 	}
 
-	return []byte(buf.String()), nil
+	return resultBuf.Bytes(), nil
 }
 
 func isValidSkinSize(width, height int) bool {
