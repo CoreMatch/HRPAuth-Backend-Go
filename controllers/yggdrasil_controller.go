@@ -3,7 +3,6 @@ package controllers
 import (
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -540,30 +539,6 @@ func (yc *YggdrasilController) DownloadTexture(c *gin.Context) {
 		sendYggdrasilError(c, "NotFoundException", "Texture not found.", http.StatusNotFound)
 		return
 	}
-
-	authHeader := c.GetHeader("Authorization")
-	accessToken := ""
-	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
-		accessToken = strings.TrimPrefix(authHeader, "Bearer ")
-	}
-
-	profileID, err := textureService.GetProfileIDFromTextureURL(config.AppConfig.Callback.URL + "/textures/" + hash)
-	if err != nil {
-		sendYggdrasilError(c, "NotFoundException", "Texture not found.", http.StatusNotFound)
-		return
-	}
-
-	if !textureService.CheckDownloadPermission(accessToken, profileID) {
-		sendYggdrasilError(c, "UnauthorizedOperationException", "Unauthorized.", http.StatusUnauthorized)
-		return
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		sendYggdrasilError(c, "InternalException", "Failed to open texture file.", http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
 
 	c.Header("Content-Type", "image/png")
 	c.File(filePath)
