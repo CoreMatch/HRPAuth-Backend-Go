@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"os"
@@ -32,8 +36,22 @@ func (sc *StartupController) InitializeConfig() error {
 }
 
 func (sc *StartupController) createDefaultConfig(path string) error {
+	configDir := filepath.Dir(path)
+
+	publicKeyPath := filepath.Join(configDir, "public_key.pem")
+	privateKeyPath := filepath.Join(configDir, "private_key.pem")
+
+	if err := sc.generateKeyPair(publicKeyPath, privateKeyPath); err != nil {
+		log.Printf("Warning: Failed to generate RSA key pair: %v", err)
+		log.Printf("Falling back to pseudo-random keys...")
+		if err := sc.generatePseudoKeys(publicKeyPath, privateKeyPath); err != nil {
+			log.Printf("Warning: Failed to generate pseudo keys: %v", err)
+		}
+	}
+
+	ConfigVersion := 0
 	defaultConfig := map[string]interface{}{
-		"version": "1.0",
+		"version": ConfigVersion,
 		"site": map[string]interface{}{
 			"name":           "HRPAuth",
 			"implementation": "HRPAuth zggdrasil-api service",
@@ -77,11 +95,12 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 		},
 		"yggdrasil": map[string]interface{}{
 			"server": map[string]interface{}{
-				"name":                 "HRPAuth",
-				"implementation":       "HRPAuth zggdrasil-api service",
-				"version":              "5526",
-				"signature_public_key": "",
-				"textures_storage":     "./",
+				"name":                       "HRPAuth",
+				"implementation":             "HRPAuth zggdrasil-api service",
+				"version":                    "5526",
+				"signature_public_key_path":  publicKeyPath,
+				"signature_private_key_path": privateKeyPath,
+				"textures_storage":           "./",
 				"links": map[string]interface{}{
 					"homepage": "",
 					"register": "",
@@ -114,6 +133,65 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 	}
 
 	log.Printf("Default config file created at %s", path)
+	log.Printf("Key pair generated at %s and %s", publicKeyPath, privateKeyPath)
 	log.Printf("Please edit the configuration file and restart the application")
 	return nil
+}
+
+func (sc *StartupController) generateKeyPair(publicKeyPath, privateKeyPath string) error {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return fmt.Errorf("failed to generate RSA private key: %v", err)
+	}
+
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+
+	if err := os.WriteFile(privateKeyPath, privateKeyPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write private key file: %v", err)
+	}
+
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal public key: %v", err)
+	}
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyBytes,
+	})
+
+	if err := os.WriteFile(publicKeyPath, publicKeyPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write public key file: %v", err)
+	}
+
+	return nil
+}
+
+func (sc *StartupController) generatePseudoKeys(publicKeyPath, privateKeyPath string) error {
+	publicPseudo := sc.generateRandomString(512)
+	privatePseudo := sc.generateRandomString(1024)
+
+	publicKeyContent := fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n", publicPseudo)
+	privateKeyContent := fmt.Sprintf("-----BEGIN RSA PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n", privatePseudo)
+
+	if err := os.WriteFile(publicKeyPath, []byte(publicKeyContent), 0644); err != nil {
+		return fmt.Errorf("failed to write pseudo public key file: %v", err)
+	}
+	if err := os.WriteFile(privateKeyPath, []byte(privateKeyContent), 0600); err != nil {
+		return fmt.Errorf("failed to write pseudo private key file: %v", err)
+	}
+
+	return nil
+}
+
+func (sc *StartupController) generateRandomString(length int) string {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[i%len(charset)]
+	}
+	return string(b)
 }

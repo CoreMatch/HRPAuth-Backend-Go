@@ -98,10 +98,10 @@ func main() {
 
 		yggdrasil.POST("/api/profiles/minecraft", yggdrasilCtrl.BatchProfiles)
 
-		yggdrasil.PUT("/api/user/profile/:uuid/skin", yggdrasilCtrl.UploadTexture)
-		yggdrasil.DELETE("/api/user/profile/:uuid/cape", yggdrasilCtrl.DeleteTexture)
-		yggdrasil.PUT("/api/user/profile/:uuid/cape", yggdrasilCtrl.UploadTexture)
-		yggdrasil.DELETE("/api/user/profile/:uuid/skin", yggdrasilCtrl.DeleteTexture)
+		yggdrasil.PUT("/api/user/profile/:uuid/:textureType", yggdrasilCtrl.UploadTexture)
+		yggdrasil.DELETE("/api/user/profile/:uuid/:textureType", yggdrasilCtrl.DeleteTexture)
+
+		yggdrasil.GET("/textures/:hash", yggdrasilCtrl.DownloadTexture)
 	}
 
 	r.NoRoute(func(c *gin.Context) {
@@ -109,7 +109,7 @@ func main() {
 		if strings.Contains(path, "authserver") ||
 			strings.Contains(path, "sessionserver") ||
 			strings.Contains(path, "/api/") ||
-			strings.Contains(path, "/api/user/profile") {
+			strings.Contains(path, "/textures/") {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":        "Not Found",
 				"errorMessage": "The requested endpoint does not exist.",

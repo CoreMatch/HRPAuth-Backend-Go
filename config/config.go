@@ -77,13 +77,16 @@ type YggdrasilConfig struct {
 }
 
 type ServerConfig struct {
-	Name               string
-	Implementation     string
-	Version            string
-	Links              LinksConfig
-	SkinDomains        []string
-	SignaturePublicKey string
-	TexturesStorage    string
+	Name                    string
+	Implementation          string
+	Version                 string
+	Links                   LinksConfig
+	SkinDomains             []string
+	SignaturePublicKeyPath  string
+	SignaturePrivateKeyPath string
+	SignaturePublicKey      string
+	SignaturePrivateKey     string
+	TexturesStorage         string
 }
 
 type LinksConfig struct {
@@ -108,7 +111,7 @@ type FeatureFlagsConfig struct {
 
 const ConfigFileName = "config.yaml"
 const ConfigFileDir = "./"
-const ConfigVersion = "1.0"
+const ConfigVersion = "2"
 
 var AppConfig *Config
 
@@ -252,11 +255,33 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 		texturesStorage = "./"
 	}
 
+	publicKeyPath := getString(server, "signature_public_key_path")
+	privateKeyPath := getString(server, "signature_private_key_path")
+
+	var publicKey, privateKey string
+	if publicKeyPath != "" {
+		if data, err := os.ReadFile(publicKeyPath); err == nil {
+			publicKey = string(data)
+		} else {
+			log.Printf("Warning: Failed to read public key file %s: %v", publicKeyPath, err)
+		}
+	}
+	if privateKeyPath != "" {
+		if data, err := os.ReadFile(privateKeyPath); err == nil {
+			privateKey = string(data)
+		} else {
+			log.Printf("Warning: Failed to read private key file %s: %v", privateKeyPath, err)
+		}
+	}
+
 	return ServerConfig{
-		Name:               getString(server, "name"),
-		Implementation:     getString(server, "implementation"),
-		Version:            getString(server, "version"),
-		SignaturePublicKey: getString(server, "signature_public_key"),
+		Name:                    getString(server, "name"),
+		Implementation:          getString(server, "implementation"),
+		Version:                 getString(server, "version"),
+		SignaturePublicKeyPath:  publicKeyPath,
+		SignaturePrivateKeyPath: privateKeyPath,
+		SignaturePublicKey:      publicKey,
+		SignaturePrivateKey:     privateKey,
 		Links: LinksConfig{
 			Homepage: getString(links, "homepage"),
 			Register: getString(links, "register"),
