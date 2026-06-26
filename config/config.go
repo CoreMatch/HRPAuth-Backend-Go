@@ -9,17 +9,17 @@ import (
 )
 
 type Config struct {
-	Version   string
-	Site      SiteConfig
-	Server    ServerRuntimeConfig
-	Callback  CallbackConfig
-	Frontend  FrontendConfig
-	KeyGen    KeyGenConfig
-	Database  DatabaseConfig
-	Memcache  MemcacheConfig
-	Redis     RedisConfig
-	SMTP      SMTPConfig
-	Yggdrasil YggdrasilConfig
+	Version          string
+	Site             SiteConfig
+	Server           ServerRuntimeConfig
+	Callback         CallbackConfig
+	Frontend         FrontendConfig
+	KeyGen           KeyGenConfig
+	Database         DatabaseConfig
+	VerificationCode VerificationCodeConfig
+	Redis            RedisConfig
+	SMTP             SMTPConfig
+	Yggdrasil        YggdrasilConfig
 }
 
 type ServerRuntimeConfig struct {
@@ -53,10 +53,7 @@ type DatabaseConfig struct {
 	Charset  string
 }
 
-type MemcacheConfig struct {
-	Host       string
-	Port       int
-	Prefix     string
+type VerificationCodeConfig struct {
 	CodeTTL    int
 	StorageDir string
 }
@@ -150,17 +147,17 @@ func Load() {
 
 	// Map YAML to Config struct
 	AppConfig = &Config{
-		Version:   getString(yamlConfig, "version"),
-		Site:      parseSiteConfig(yamlConfig),
-		Server:    parseServerRuntimeConfig(yamlConfig),
-		Callback:  parseCallbackConfig(yamlConfig),
-		Frontend:  parseFrontendConfig(yamlConfig),
-		KeyGen:    parseKeyGenConfig(yamlConfig),
-		Database:  parseDatabaseConfig(yamlConfig),
-		Memcache:  parseMemcacheConfig(yamlConfig),
-		Redis:     parseRedisConfig(yamlConfig),
-		SMTP:      parseSMTPConfig(yamlConfig),
-		Yggdrasil: parseYggdrasilConfig(yamlConfig),
+		Version:          getString(yamlConfig, "version"),
+		Site:             parseSiteConfig(yamlConfig),
+		Server:           parseServerRuntimeConfig(yamlConfig),
+		Callback:         parseCallbackConfig(yamlConfig),
+		Frontend:         parseFrontendConfig(yamlConfig),
+		KeyGen:           parseKeyGenConfig(yamlConfig),
+		Database:         parseDatabaseConfig(yamlConfig),
+		VerificationCode: parseVerificationCodeConfig(yamlConfig),
+		Redis:            parseRedisConfig(yamlConfig),
+		SMTP:             parseSMTPConfig(yamlConfig),
+		Yggdrasil:        parseYggdrasilConfig(yamlConfig),
 	}
 
 	log.Println("Configuration loaded successfully")
@@ -215,14 +212,11 @@ func parseDatabaseConfig(config map[string]interface{}) DatabaseConfig {
 	}
 }
 
-func parseMemcacheConfig(config map[string]interface{}) MemcacheConfig {
-	memcache, _ := config["memcache"].(map[string]interface{})
-	return MemcacheConfig{
-		Host:       getString(memcache, "host"),
-		Port:       getInt(memcache, "port"),
-		Prefix:     getString(memcache, "prefix"),
-		CodeTTL:    getInt(memcache, "code_ttl"),
-		StorageDir: getString(memcache, "storage_dir"),
+func parseVerificationCodeConfig(config map[string]interface{}) VerificationCodeConfig {
+	vc, _ := config["verification_code"].(map[string]interface{})
+	return VerificationCodeConfig{
+		CodeTTL:    getInt(vc, "code_ttl"),
+		StorageDir: getString(vc, "storage_dir"),
 	}
 }
 

@@ -68,10 +68,7 @@ func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath st
 			"password": "hrpa",
 			"charset":  "utf8mb4",
 		},
-		"memcache": map[string]interface{}{
-			"host":        "127.0.0.1",
-			"port":        11211,
-			"prefix":      "hrpauth_",
+		"verification_code": map[string]interface{}{
 			"code_ttl":    600,
 			"storage_dir": "./cache/verification_codes",
 		},

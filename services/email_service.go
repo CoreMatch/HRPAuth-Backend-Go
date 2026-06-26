@@ -113,7 +113,7 @@ type codeData struct {
 }
 
 func (vcs *VerificationCodeStore) Store(email, code string) bool {
-	storageDir := config.AppConfig.Memcache.StorageDir
+	storageDir := config.AppConfig.VerificationCode.StorageDir
 	if err := os.MkdirAll(storageDir, 0755); err != nil {
 		return false
 	}
@@ -121,7 +121,7 @@ func (vcs *VerificationCodeStore) Store(email, code string) bool {
 	filename := filepath.Join(storageDir, md5Hash(email)+".json")
 	data := codeData{
 		Code:      code,
-		ExpiresAt: time.Now().Unix() + int64(config.AppConfig.Memcache.CodeTTL),
+		ExpiresAt: time.Now().Unix() + int64(config.AppConfig.VerificationCode.CodeTTL),
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -133,7 +133,7 @@ func (vcs *VerificationCodeStore) Store(email, code string) bool {
 }
 
 func (vcs *VerificationCodeStore) Get(email string) (string, bool) {
-	storageDir := config.AppConfig.Memcache.StorageDir
+	storageDir := config.AppConfig.VerificationCode.StorageDir
 	filename := filepath.Join(storageDir, md5Hash(email)+".json")
 
 	data, err := os.ReadFile(filename)
@@ -155,7 +155,7 @@ func (vcs *VerificationCodeStore) Get(email string) (string, bool) {
 }
 
 func (vcs *VerificationCodeStore) Delete(email string) bool {
-	storageDir := config.AppConfig.Memcache.StorageDir
+	storageDir := config.AppConfig.VerificationCode.StorageDir
 	filename := filepath.Join(storageDir, md5Hash(email)+".json")
 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
