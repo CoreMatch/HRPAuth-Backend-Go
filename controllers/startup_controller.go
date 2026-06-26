@@ -31,24 +31,17 @@ func (sc *StartupController) InitializeConfig() error {
 	}
 
 	log.Printf("Config file found at %s", configPath)
+
+	// Check config file version and migrate if necessary
+	if err := sc.checkAndMigrateConfig(configPath); err != nil {
+		return fmt.Errorf("failed to check/migrate config: %v", err)
+	}
+
 	return nil
 }
 
-func (sc *StartupController) createDefaultConfig(path string) error {
-	cfgDir := filepath.Dir(path)
-
-	publicKeyPath := filepath.Join(cfgDir, "public_key.pem")
-	privateKeyPath := filepath.Join(cfgDir, "private_key.pem")
-
-	if err := sc.generateKeyPair(publicKeyPath, privateKeyPath); err != nil {
-		log.Printf("Warning: Failed to generate RSA key pair: %v", err)
-		log.Printf("Falling back to pseudo-random keys...")
-		if err := sc.generatePseudoKeys(publicKeyPath, privateKeyPath); err != nil {
-			log.Printf("Warning: Failed to generate pseudo keys: %v", err)
-		}
-	}
-
-	defaultConfig := map[string]interface{}{
+func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath string) map[string]interface{} {
+	return map[string]interface{}{
 		"version": config.ConfigVersion,
 		"site": map[string]interface{}{
 			"name":           "HRPAuth",
@@ -120,6 +113,23 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 			},
 		},
 	}
+}
+
+func (sc *StartupController) createDefaultConfig(path string) error {
+	cfgDir := filepath.Dir(path)
+
+	publicKeyPath := filepath.Join(cfgDir, "public_key.pem")
+	privateKeyPath := filepath.Join(cfgDir, "private_key.pem")
+
+	if err := sc.generateKeyPair(publicKeyPath, privateKeyPath); err != nil {
+		log.Printf("Warning: Failed to generate RSA key pair: %v", err)
+		log.Printf("Falling back to pseudo-random keys...")
+		if err := sc.generatePseudoKeys(publicKeyPath, privateKeyPath); err != nil {
+			log.Printf("Warning: Failed to generate pseudo keys: %v", err)
+		}
+	}
+
+	defaultConfig := sc.buildDefaultConfig(publicKeyPath, privateKeyPath)
 
 	data, err := yaml.Marshal(defaultConfig)
 	if err != nil {
@@ -134,6 +144,115 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 	log.Printf("Key pair generated at %s and %s", publicKeyPath, privateKeyPath)
 	log.Printf("Please edit the configuration file and restart the application")
 	return nil
+}
+
+// checkAndMigrateConfig checks the config file's version. If it does not match
+// the expected version, the config is updated: missing fields are added from
+// the default schema, and extra fields (spare content) are removed.
+func (sc *StartupController) checkAndMigrateConfig(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	var currentConfig map[string]interface{}
+	if err := yaml.Unmarshal(data, &currentConfig); err != nil {
+		return fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	currentVersion, _ := currentConfig["version"].(string)
+	if currentVersion == config.ConfigVersion {
+		log.Printf("Config file version %s is up-to-date", currentVersion)
+		return nil
+	}
+
+	if currentVersion == "" {
+		log.Printf("Config file is missing version field, migrating to version %s", config.ConfigVersion)
+	} else {
+		log.Printf("Config file version mismatch: current=%q, expected=%q, migrating...",
+			currentVersion, config.ConfigVersion)
+	}
+
+	cfgDir := filepath.Dir(path)
+	publicKeyPath := filepath.Join(cfgDir, "public_key.pem")
+	privateKeyPath := filepath.Join(cfgDir, "private_key.pem")
+
+	// Preserve existing key paths if present; otherwise generate a new key pair.
+	existingPubPath, existingPrivPath := sc.getExistingKeyPaths(currentConfig)
+	if existingPubPath != "" && existingPrivPath != "" {
+		publicKeyPath = existingPubPath
+		privateKeyPath = existingPrivPath
+	} else {
+		log.Printf("Signature key paths missing in config, generating new key pair...")
+		if err := sc.generateKeyPair(publicKeyPath, privateKeyPath); err != nil {
+			log.Printf("Warning: Failed to generate RSA key pair: %v", err)
+			log.Printf("Falling back to pseudo-random keys...")
+			if err := sc.generatePseudoKeys(publicKeyPath, privateKeyPath); err != nil {
+				log.Printf("Warning: Failed to generate pseudo keys: %v", err)
+			}
+		}
+	}
+
+	defaultConfig := sc.buildDefaultConfig(publicKeyPath, privateKeyPath)
+	mergedConfig := mergeConfigMaps(defaultConfig, currentConfig)
+
+	data, err = yaml.Marshal(mergedConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal migrated config: %v", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write migrated config file: %v", err)
+	}
+
+	log.Printf("Config file migrated to version %s at %s", config.ConfigVersion, path)
+	return nil
+}
+
+// getExistingKeyPaths extracts the signature key paths from a raw config map.
+func (sc *StartupController) getExistingKeyPaths(cfg map[string]interface{}) (string, string) {
+	yggdrasil, _ := cfg["yggdrasil"].(map[string]interface{})
+	serverCfg, _ := yggdrasil["server"].(map[string]interface{})
+	pubPath, _ := serverCfg["signature_public_key_path"].(string)
+	privPath, _ := serverCfg["signature_private_key_path"].(string)
+	return pubPath, privPath
+}
+
+// mergeConfigMaps returns a map that follows the schema of defaultCfg, taking
+// values from currentCfg where they exist. Keys present in currentCfg but not
+// in defaultCfg are dropped (spare content). Keys present in defaultCfg but
+// not in currentCfg are added (missing content).
+func mergeConfigMaps(defaultCfg, currentCfg map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{}, len(defaultCfg))
+	for key, defaultVal := range defaultCfg {
+		currentVal, exists := currentCfg[key]
+		if !exists {
+			result[key] = deepCopyValue(defaultVal)
+			continue
+		}
+		defaultMap, defaultIsMap := defaultVal.(map[string]interface{})
+		currentMap, currentIsMap := currentVal.(map[string]interface{})
+		if defaultIsMap && currentIsMap {
+			result[key] = mergeConfigMaps(defaultMap, currentMap)
+		} else {
+			result[key] = currentVal
+		}
+	}
+	return result
+}
+
+// deepCopyValue returns a deep copy of v so the merged result does not share
+// references with the default config map.
+func deepCopyValue(v interface{}) interface{} {
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		return v
+	}
+	var copy interface{}
+	if err := yaml.Unmarshal(data, &copy); err != nil {
+		return v
+	}
+	return copy
 }
 
 func (sc *StartupController) generateKeyPair(publicKeyPath, privateKeyPath string) error {
