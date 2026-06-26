@@ -1,0 +1,97 @@
+package controllers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/lnb/HRPAuth-Backend-Go/database"
+	"github.com/lnb/HRPAuth-Backend-Go/models"
+)
+
+type UserInfoController struct{}
+
+func NewUserInfoController() *UserInfoController {
+	return &UserInfoController{}
+}
+
+type GetUserRequest struct {
+	RememberToken string `json:"remember_token"`
+	UID           string `json:"uid"`
+	Email         string `json:"email"`
+}
+
+func (uc *UserInfoController) GetUser(c *gin.Context) {
+	var req GetUserRequest
+	token := ""
+	uid := ""
+	email := ""
+
+	if err := c.ShouldBindJSON(&req); err == nil {
+		token = req.RememberToken
+		uid = req.UID
+		email = req.Email
+	}
+
+	if token == "" {
+		token = c.PostForm("remember_token")
+	}
+	if uid == "" {
+		uid = c.PostForm("uid")
+	}
+	if email == "" {
+		email = c.PostForm("email")
+	}
+
+	if token == "" {
+		token = c.Query("remember_token")
+	}
+	if uid == "" {
+		uid = c.Query("uid")
+	}
+	if email == "" {
+		email = c.Query("email")
+	}
+
+	if token == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "未登录或登录已过期",
+			"data":    nil,
+		})
+		return
+	}
+
+	query := database.DB.Model(&models.User{}).Where("remember_token = ?", token)
+
+	if uid != "" {
+		query = query.Where("uid = ?", uid)
+	}
+	if email != "" {
+		query = query.Where("email = ?", email)
+	}
+
+	var user models.User
+	result := query.First(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户不存在或token无效",
+			"data":    nil,
+		})
+		return
+	}
+
+	userData := gin.H{
+		"uid":      user.UID,
+		"email":    user.Email,
+		"username": user.Username,
+		"avatar":   user.Avatar,
+		"verified": user.Verified,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "获取用户信息成功",
+		"data":    userData,
+	})
+}

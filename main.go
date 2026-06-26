@@ -43,7 +43,8 @@ func main() {
 	r.Use(CORSMiddleware())
 
 	authCtrl := controllers.NewAuthController()
-	userCtrl := controllers.NewUserController()
+	userInfoCtrl := controllers.NewUserInfoController()
+	userProfileCtrl := controllers.NewUserProfileController()
 	totpCtrl := controllers.NewTOTPController()
 	emailCtrl := controllers.NewEmailVerificationController()
 	keygenCtrl := controllers.NewKeyGenController()
@@ -68,7 +69,7 @@ func main() {
 		api.POST("/login", authCtrl.Login)
 		api.POST("/register", authCtrl.Register)
 		api.GET("/logout", authCtrl.Logout)
-		api.POST("/user", userCtrl.GetUser)
+		api.POST("/user", userInfoCtrl.GetUser)
 
 		api.POST("/email-verification", emailCtrl.Handle)
 
@@ -76,7 +77,7 @@ func main() {
 		api.POST("/totp/setup", totpCtrl.SetupTOTP)
 		api.POST("/totp/verify", totpCtrl.VerifyTOTP)
 
-		api.POST("/change-username", userCtrl.ChangeUsername)
+		api.POST("/change-username", userProfileCtrl.ChangeUsername)
 
 		api.POST("/generate-key", keygenCtrl.Generate)
 	}
