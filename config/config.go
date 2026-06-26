@@ -83,6 +83,7 @@ type ServerConfig struct {
 	Links              LinksConfig
 	SkinDomains        []string
 	SignaturePublicKey string
+	TexturesStorage    string
 }
 
 type LinksConfig struct {
@@ -246,6 +247,11 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 		}
 	}
 
+	texturesStorage := getString(server, "textures_storage")
+	if texturesStorage == "" {
+		texturesStorage = "./"
+	}
+
 	return ServerConfig{
 		Name:               getString(server, "name"),
 		Implementation:     getString(server, "implementation"),
@@ -255,7 +261,8 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 			Homepage: getString(links, "homepage"),
 			Register: getString(links, "register"),
 		},
-		SkinDomains: skinDomainsStr,
+		SkinDomains:     skinDomainsStr,
+		TexturesStorage: texturesStorage,
 	}
 }
 

@@ -81,6 +81,7 @@ func (sc *StartupController) createDefaultConfig(path string) error {
 				"implementation":       "HRPAuth zggdrasil-api service",
 				"version":              "5526",
 				"signature_public_key": "",
+				"textures_storage":     "./",
 				"links": map[string]interface{}{
 					"homepage": "",
 					"register": "",
