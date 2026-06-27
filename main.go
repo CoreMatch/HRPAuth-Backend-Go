@@ -80,6 +80,7 @@ func main() {
 		api.POST("/totp/verify", totpCtrl.VerifyTOTP)
 
 		api.POST("/change-username", userProfileCtrl.ChangeUsername)
+		api.POST("/change-profile-name", userProfileCtrl.ChangeProfileName)
 
 		api.POST("/generate-key", keygenCtrl.Generate)
 	}

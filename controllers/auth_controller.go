@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lnb/HRPAuth-Backend-Go/database"
 	"github.com/lnb/HRPAuth-Backend-Go/models"
+	"github.com/lnb/HRPAuth-Backend-Go/services"
 	"github.com/lnb/HRPAuth-Backend-Go/utils"
+	"gorm.io/gorm"
 )
 
 type AuthController struct{}
@@ -189,23 +191,21 @@ func (ac *AuthController) Register(c *gin.Context) {
 		RegDate:           now.Unix(),
 	}
 
-	result := database.DB.Create(&user)
-	if result.Error != nil {
+	authService := services.NewAuthService()
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		_, err = authService.CreateDefaultProfileForUserTx(tx, user.UUID, username)
+		return err
+	})
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"message": "Failed to create user",
+			"message": "Failed to create user profile",
 		})
 		return
 	}
-
-	profileID := utils.GenerateUnsignedUUID()
-	profile := models.Profile{
-		ID:     profileID,
-		UserID: uuid,
-		Name:   username,
-		Model:  "default",
-	}
-	database.DB.Create(&profile)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

@@ -12,6 +12,7 @@ import (
 	"github.com/lnb/HRPAuth-Backend-Go/redis"
 	"github.com/lnb/HRPAuth-Backend-Go/utils"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type AuthService struct{}
@@ -87,6 +88,53 @@ func (as *AuthService) GetUserProfiles(userUUID string) []ProfileInfo {
 	return result
 }
 
+func (as *AuthService) CreateDefaultProfileForUserTx(tx *gorm.DB, userUUID, profileName string) (*models.Profile, error) {
+	var count int64
+	if err := tx.Model(&models.Profile{}).Where("user_id = ?", userUUID).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, nil
+	}
+
+	profile := models.Profile{
+		ID:     utils.GenerateUnsignedUUID(),
+		UserID: userUUID,
+		Name:   profileName,
+		Model:  "default",
+	}
+	if err := tx.Create(&profile).Error; err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (as *AuthService) CreateDefaultProfileForUser(userUUID, profileName string) (*models.Profile, error) {
+	return as.CreateDefaultProfileForUserTx(database.DB, userUUID, profileName)
+}
+
+func (as *AuthService) RenameProfile(userUUID, profileID, newName string) (*models.Profile, error) {
+	var profile models.Profile
+	if err := database.DB.Where("id = ? AND user_id = ?", profileID, userUUID).First(&profile).Error; err != nil {
+		return nil, fmt.Errorf("profile not found")
+	}
+	if profile.Name == newName {
+		return &profile, nil
+	}
+
+	var existing models.Profile
+	if err := database.DB.Where("name = ? AND id != ?", newName, profileID).First(&existing).Error; err == nil {
+		return nil, fmt.Errorf("profile name already exists")
+	}
+
+	if err := database.DB.Model(&profile).Update("name", newName).Error; err != nil {
+		return nil, err
+	}
+
+	profile.Name = newName
+	return &profile, nil
+}
+
 func (as *AuthService) CreateToken(accessToken, clientToken, userID, profileID string, expiresInDays int) bool {
 	token := models.Token{
 		AccessToken:       accessToken,
@@ -149,7 +197,7 @@ func (as *AuthService) GetProfileByID(profileID string) *ProfileInfo {
 
 	return &ProfileInfo{
 		ID:    profile.ID,
-		Name:  user.Username,
+		Name:  profile.Name,
 		Model: profile.Model,
 	}
 }
