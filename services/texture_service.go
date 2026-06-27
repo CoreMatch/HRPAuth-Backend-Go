@@ -307,6 +307,82 @@ func (ts *TextureService) SignTextureValue(value string) (string, error) {
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
+func (ts *TextureService) UploadTextureByUser(userID, profileID, textureType, model string, fileData []byte) error {
+	if !NewAuthService().IsProfileOwnedByUser(profileID, userID) {
+		return fmt.Errorf("profile not owned by user")
+	}
+
+	validatedData, err := ts.ValidateTexture(strings.NewReader(string(fileData)), textureType, model)
+	if err != nil {
+		return err
+	}
+
+	hash := ts.CalculateHash(validatedData)
+
+	if err := ts.SaveTexture(validatedData, hash); err != nil {
+		return err
+	}
+
+	callbackURL := config.AppConfig.Callback.URL
+	textureURL := strings.TrimRight(callbackURL, "/") + "/textures/" + hash
+
+	if err := ts.UpdateProfileTexture(profileID, textureType, textureURL, model); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ts *TextureService) RemoveTextureByUser(userID, profileID, textureType string) error {
+	if !NewAuthService().IsProfileOwnedByUser(profileID, userID) {
+		return fmt.Errorf("profile not owned by user")
+	}
+
+	var prop models.ProfileProperty
+	result := database.DB.
+		Where("profile_id = ? AND name = ?", profileID, "textures").
+		First(&prop)
+
+	if result.Error != nil {
+		return nil
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(prop.Value)
+	if err != nil {
+		return fmt.Errorf("failed to decode texture property: %v", err)
+	}
+
+	var payload TexturesPayload
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal texture payload: %v", err)
+	}
+
+	delete(payload.Textures, strings.ToUpper(textureType))
+
+	if len(payload.Textures) == 0 {
+		if err := database.DB.Delete(&prop).Error; err != nil {
+			return fmt.Errorf("failed to delete profile property: %v", err)
+		}
+	} else {
+		payload.Timestamp = time.Now().UnixMilli()
+		newData, _ := json.Marshal(payload)
+		newValue := base64.StdEncoding.EncodeToString(newData)
+
+		signature, err := ts.SignTextureValue(newValue)
+		if err != nil {
+			return err
+		}
+
+		prop.Value = newValue
+		prop.Signature = signature
+		if err := database.DB.Save(&prop).Error; err != nil {
+			return fmt.Errorf("failed to update profile property: %v", err)
+		}
+	}
+
+	return nil
+}
+
 func (ts *TextureService) RemoveTexture(accessToken, profileID, textureType string) error {
 	token := NewAuthService().ValidateToken(accessToken, "")
 	if token == nil {

@@ -27,11 +27,11 @@ type AgentInfo struct {
 }
 
 type AuthenticateRequest struct {
-	Username     string    `json:"username"`
-	Password     string    `json:"password"`
-	Agent        AgentInfo `json:"agent"`
-	ClientToken  string    `json:"clientToken"`
-	RequestUser  bool      `json:"requestUser"`
+	Username    string    `json:"username"`
+	Password    string    `json:"password"`
+	Agent       AgentInfo `json:"agent"`
+	ClientToken string    `json:"clientToken"`
+	RequestUser bool      `json:"requestUser"`
 }
 
 type RefreshRequest struct {
@@ -94,18 +94,18 @@ func (yc *YggdrasilController) Meta(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"meta": gin.H{
-			"serverName":              cfg.Name,
-			"implementationName":      cfg.Implementation,
-			"implementationVersion":   cfg.Version,
-			"links":                   links,
-			"feature.non_email_login": config.AppConfig.Yggdrasil.FeatureFlags.NonEmailLogin,
-			"feature.legacy_skin_api": config.AppConfig.Yggdrasil.FeatureFlags.LegacySkinAPI,
-			"feature.no_mojang_namespace": config.AppConfig.Yggdrasil.FeatureFlags.NoMojangNamespace,
+			"serverName":                          cfg.Name,
+			"implementationName":                  cfg.Implementation,
+			"implementationVersion":               cfg.Version,
+			"links":                               links,
+			"feature.non_email_login":             config.AppConfig.Yggdrasil.FeatureFlags.NonEmailLogin,
+			"feature.legacy_skin_api":             config.AppConfig.Yggdrasil.FeatureFlags.LegacySkinAPI,
+			"feature.no_mojang_namespace":         config.AppConfig.Yggdrasil.FeatureFlags.NoMojangNamespace,
 			"feature.enable_mojang_anti_features": config.AppConfig.Yggdrasil.FeatureFlags.EnableMojangAntiFeatures,
-			"feature.enable_profile_key": config.AppConfig.Yggdrasil.FeatureFlags.EnableProfileKey,
-			"feature.username_check": config.AppConfig.Yggdrasil.FeatureFlags.UsernameCheck,
+			"feature.enable_profile_key":          config.AppConfig.Yggdrasil.FeatureFlags.EnableProfileKey,
+			"feature.username_check":              config.AppConfig.Yggdrasil.FeatureFlags.UsernameCheck,
 		},
-		"skinDomains":       skinDomains,
+		"skinDomains":        skinDomains,
 		"signaturePublickey": cfg.SignaturePublicKey,
 	})
 }

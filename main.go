@@ -50,6 +50,7 @@ func main() {
 	totpCtrl := controllers.NewTOTPController()
 	emailCtrl := controllers.NewEmailVerificationController()
 	keygenCtrl := controllers.NewKeyGenController()
+	textureCtrl := controllers.NewTextureController()
 	yggdrasilCtrl := controllers.NewYggdrasilController()
 
 	r.GET("/status", func(c *gin.Context) {
@@ -83,6 +84,10 @@ func main() {
 		api.POST("/change-profile-name", userProfileCtrl.ChangeProfileName)
 
 		api.POST("/generate-key", keygenCtrl.Generate)
+
+		api.POST("/texture/upload", textureCtrl.UploadTexture)
+		api.POST("/texture/delete", textureCtrl.DeleteTexture)
+		api.POST("/texture/get", textureCtrl.GetTexture)
 	}
 
 	yggdrasil := r.Group("")
