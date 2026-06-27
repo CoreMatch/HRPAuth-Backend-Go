@@ -95,20 +95,15 @@ func (uc *UserProfileController) ChangeUsername(c *gin.Context) {
 		return
 	}
 
-	var count int64
-	database.DB.Model(&models.User{}).
-		Where("username = ? AND uid != ?", newUsername, user.UID).
-		Count(&count)
-
-	if count > 0 {
+	authService := services.NewAuthService()
+	_, _, err := authService.SyncUserAndProfileName(user.UUID, "", newUsername)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "该用户名已被使用",
+			"message": err.Error(),
 		})
 		return
 	}
-
-	database.DB.Model(&user).Update("username", newUsername)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -208,7 +203,7 @@ func (uc *UserProfileController) ChangeProfileName(c *gin.Context) {
 	}
 
 	authService := services.NewAuthService()
-	profile, err := authService.RenameProfile(user.UUID, profileID, newName)
+	_, profile, err := authService.SyncUserAndProfileName(user.UUID, profileID, newName)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

@@ -135,6 +135,56 @@ func (as *AuthService) RenameProfile(userUUID, profileID, newName string) (*mode
 	return &profile, nil
 }
 
+func (as *AuthService) SyncUserAndProfileName(userUUID, profileID, newName string) (*models.User, *models.Profile, error) {
+	var user models.User
+	if err := database.DB.Where("uuid = ?", userUUID).First(&user).Error; err != nil {
+		return nil, nil, fmt.Errorf("user not found")
+	}
+
+	var profile models.Profile
+	if profileID == "" {
+		if err := database.DB.Where("user_id = ?", userUUID).Order("created_at ASC").First(&profile).Error; err != nil {
+			return nil, nil, fmt.Errorf("profile not found")
+		}
+		profileID = profile.ID
+	} else {
+		if err := database.DB.Where("id = ? AND user_id = ?", profileID, userUUID).First(&profile).Error; err != nil {
+			return nil, nil, fmt.Errorf("profile not found")
+		}
+	}
+
+	if user.Username == newName && profile.Name == newName {
+		return &user, &profile, nil
+	}
+
+	var existingUser models.User
+	if err := database.DB.Where("username = ? AND uuid != ?", newName, user.UUID).First(&existingUser).Error; err == nil {
+		return nil, nil, fmt.Errorf("username already exists")
+	}
+
+	var existingProfile models.Profile
+	if err := database.DB.Where("name = ? AND id != ?", newName, profile.ID).First(&existingProfile).Error; err == nil {
+		return nil, nil, fmt.Errorf("profile name already exists")
+	}
+
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.User{}).Where("uuid = ?", userUUID).Update("username", newName).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.Profile{}).Where("id = ?", profileID).Update("name", newName).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	user.Username = newName
+	profile.Name = newName
+	return &user, &profile, nil
+}
+
 func (as *AuthService) CreateToken(accessToken, clientToken, userID, profileID string, expiresInDays int) bool {
 	token := models.Token{
 		AccessToken:       accessToken,
