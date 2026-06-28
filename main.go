@@ -40,6 +40,9 @@ func main() {
 	database.Init()
 	redis.Init()
 
+	cleanupCtrl := controllers.NewTokenCleanupController()
+	cleanupCtrl.Start(1 * time.Hour)
+
 	r := gin.Default()
 
 	r.Use(CORSMiddleware())

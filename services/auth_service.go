@@ -213,6 +213,25 @@ func (as *AuthService) InvalidateAllUserTokens(userID string) bool {
 	return result.Error == nil
 }
 
+func (as *AuthService) GetValidTokenByClientToken(userID, clientToken string) *models.Token {
+	if clientToken == "" {
+		return nil
+	}
+	var token models.Token
+	result := database.DB.Where("user_id = ? AND client_token = ? AND state = ?",
+		userID, clientToken, "valid").First(&token)
+	if result.Error != nil {
+		return nil
+	}
+	nowMillis := utils.CurrentTimestampMillis()
+	expiryMillis := token.IssuedAt + int64(token.ExpiresInDays)*24*60*60*1000
+	if nowMillis > expiryMillis {
+		as.InvalidateToken(token.AccessToken)
+		return nil
+	}
+	return &token
+}
+
 func (as *AuthService) ValidateToken(accessToken string, clientToken string) *models.Token {
 	var token models.Token
 	result := database.DB.Where("access_token = ? AND state = ?", accessToken, "valid").First(&token)
@@ -232,6 +251,60 @@ func (as *AuthService) ValidateToken(accessToken string, clientToken string) *mo
 	}
 
 	return &token
+}
+
+func (as *AuthService) ValidateTokenForRefresh(accessToken string, clientToken string) *models.Token {
+	var token models.Token
+	result := database.DB.Where("access_token = ? AND state IN ?", accessToken, []string{"valid", "temporarily_invalid"}).
+		First(&token)
+	if result.Error != nil {
+		return nil
+	}
+
+	if clientToken != "" && clientToken != token.ClientToken {
+		return nil
+	}
+
+	nowMillis := utils.CurrentTimestampMillis()
+	expiryMillis := token.IssuedAt + int64(token.ExpiresInDays)*24*60*60*1000
+	if nowMillis > expiryMillis {
+		as.InvalidateToken(accessToken)
+		return nil
+	}
+
+	return &token
+}
+
+func (as *AuthService) RefreshTokenExpiry(accessToken string, expiresInDays int) bool {
+	nowMillis := utils.CurrentTimestampMillis()
+	result := database.DB.Model(&models.Token{}).
+		Where("access_token = ?", accessToken).
+		Updates(map[string]interface{}{
+			"issued_at":       nowMillis,
+			"expires_in_days": expiresInDays,
+		})
+	return result.Error == nil
+}
+
+func (as *AuthService) MarkOtherClientTokensTemporarilyInvalid(userID, currentClientToken string) int64 {
+	result := database.DB.Model(&models.Token{}).
+		Where("user_id = ? AND client_token != ? AND state = ?", userID, currentClientToken, "valid").
+		Update("state", "temporarily_invalid")
+	if result.Error != nil {
+		return 0
+	}
+	return result.RowsAffected
+}
+
+func (as *AuthService) CleanupExpiredTokens() int64 {
+	nowMillis := utils.CurrentTimestampMillis()
+	cutoff := nowMillis - int64(config.AppConfig.Yggdrasil.Security.TokenExpiryDays+1)*24*60*60*1000
+	result := database.DB.Where("state = ? OR issued_at < ?", "invalid", cutoff).
+		Delete(&models.Token{})
+	if result.Error != nil {
+		return 0
+	}
+	return result.RowsAffected
 }
 
 func (as *AuthService) GetProfileByID(profileID string) *ProfileInfo {

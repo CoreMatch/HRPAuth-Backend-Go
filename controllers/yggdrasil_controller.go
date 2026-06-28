@@ -163,9 +163,21 @@ func (yc *YggdrasilController) Authenticate(c *gin.Context) {
 		}
 	}
 
-	if !yc.authService.CreateToken(accessToken, clientToken, user.UUID, selectedProfile.ID, expiresInDays) {
-		sendYggdrasilError(c, "ForbiddenOperationException", "Failed to create session. Please try again.", http.StatusForbidden)
-		return
+	if existing := yc.authService.GetValidTokenByClientToken(user.UUID, clientToken); existing != nil {
+		for _, p := range profiles {
+			if p.ID == existing.SelectedProfileID {
+				selectedProfile = p
+				break
+			}
+		}
+		accessToken = existing.AccessToken
+		yc.authService.RefreshTokenExpiry(existing.AccessToken, expiresInDays)
+	} else {
+		yc.authService.MarkOtherClientTokensTemporarilyInvalid(user.UUID, clientToken)
+		if !yc.authService.CreateToken(accessToken, clientToken, user.UUID, selectedProfile.ID, expiresInDays) {
+			sendYggdrasilError(c, "ForbiddenOperationException", "Failed to create session. Please try again.", http.StatusForbidden)
+			return
+		}
 	}
 
 	response := gin.H{
@@ -202,7 +214,7 @@ func (yc *YggdrasilController) Refresh(c *gin.Context) {
 		return
 	}
 
-	token := yc.authService.ValidateToken(req.AccessToken, req.ClientToken)
+	token := yc.authService.ValidateTokenForRefresh(req.AccessToken, req.ClientToken)
 	if token == nil {
 		sendYggdrasilError(c, "ForbiddenOperationException", "Invalid token.", http.StatusForbidden)
 		return
@@ -236,6 +248,7 @@ func (yc *YggdrasilController) Refresh(c *gin.Context) {
 	}
 
 	expiresInDays := config.AppConfig.Yggdrasil.Security.TokenExpiryDays
+	yc.authService.MarkOtherClientTokensTemporarilyInvalid(token.UserID, req.ClientToken)
 	yc.authService.CreateToken(newAccessToken, req.ClientToken, token.UserID, selectedProfile.ID, expiresInDays)
 
 	response := gin.H{
