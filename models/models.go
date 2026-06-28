@@ -18,7 +18,6 @@ type User struct {
 	LastSignAt       *time.Time `gorm:"column:last_sign_at"`
 	RegisterAt       *time.Time `gorm:"column:register_at"`
 	Verified         bool      `gorm:"type:tinyint(1);default:0;column:verified"`
-	VerificationToken string   `gorm:"type:varchar(255);default:'';column:verification_token"`
 	RememberToken    string    `gorm:"type:varchar(100);column:remember_token"`
 	Username         string    `gorm:"type:varchar(255);column:username"`
 	LastLogin        int64     `gorm:"column:lastlogin"`

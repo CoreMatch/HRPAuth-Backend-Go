@@ -26,6 +26,11 @@ type VerifyTOTPRequest struct {
 	Passcode string `json:"passcode"`
 }
 
+type HasBeenEnabledRequest struct {
+	UID string `json:"uid"`
+	RT  string `json:"rt"`
+}
+
 func (tc *TOTPController) Generate(c *gin.Context) {
 	secret := c.Query("secret")
 	if secret == "" {
@@ -80,8 +85,8 @@ func (tc *TOTPController) SetupTOTP(c *gin.Context) {
 	database.DB.Model(&user).Update("totp", secret)
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":  true,
-		"totpkey":  secret,
+		"success": true,
+		"totpkey": secret,
 	})
 }
 
@@ -153,5 +158,47 @@ func (tc *TOTPController) VerifyTOTP(c *gin.Context) {
 		"success": true,
 		"email":   email,
 		"rt":      rt,
+	})
+}
+
+func (tc *TOTPController) HasBeenEnabled(c *gin.Context) {
+	var req HasBeenEnabledRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid request body",
+		})
+		return
+	}
+
+	uid := req.UID
+	rt := req.RT
+
+	if uid == "" || rt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Missing uid or rt",
+		})
+		return
+	}
+
+	var user models.User
+	result := database.DB.Where("uid = ? AND remember_token = ?", uid, rt).First(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Invalid uid or rt",
+		})
+		return
+	}
+
+	enabled := 0
+	if user.TOTP != "" {
+		enabled = 1
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"enabled": enabled,
 	})
 }

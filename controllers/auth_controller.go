@@ -168,7 +168,6 @@ func (ac *AuthController) Register(c *gin.Context) {
 
 	ip := c.ClientIP()
 	now := time.Now()
-	verificationToken := utils.GenerateRandomToken(16)
 	uuid := utils.GenerateUnsignedUUID()
 
 	var maxUID uint
@@ -176,19 +175,18 @@ func (ac *AuthController) Register(c *gin.Context) {
 	newUID := maxUID + 1
 
 	user := models.User{
-		UID:               newUID,
-		UUID:              uuid,
-		Email:             email,
-		Username:          username,
-		Password:          hash,
-		IP:                ip,
-		RegIP:             ip,
-		LastSignAt:        &now,
-		RegisterAt:        &now,
-		Score:             1000,
-		Verified:          false,
-		VerificationToken: verificationToken,
-		RegDate:           now.Unix(),
+		UID:        newUID,
+		UUID:       uuid,
+		Email:      email,
+		Username:   username,
+		Password:   hash,
+		IP:         ip,
+		RegIP:      ip,
+		LastSignAt: &now,
+		RegisterAt: &now,
+		Score:      1000,
+		Verified:   false,
+		RegDate:    now.Unix(),
 	}
 
 	authService := services.NewAuthService()
