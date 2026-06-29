@@ -106,6 +106,8 @@ func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath st
 				"token_expiry_days":      15,
 				"session_expiry_seconds": 30,
 				"password_cost":          10,
+				"enable_captcha":         true,
+				"captcha_ttl":            300,
 			},
 			"feature_flags": map[string]interface{}{
 				"non_email_login":             true,

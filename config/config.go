@@ -108,6 +108,8 @@ type SecurityConfig struct {
 	RateLimitWindowSec   int
 	MaxTextureWidth      int
 	MaxTextureHeight     int
+	EnableCaptcha        bool
+	CaptchaTTL           int
 }
 
 type FeatureFlagsConfig struct {
@@ -328,6 +330,10 @@ func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
 	if maxTextureHeight == 0 {
 		maxTextureHeight = 1024
 	}
+	captchaTTL := getInt(security, "captcha_ttl")
+	if captchaTTL == 0 {
+		captchaTTL = 300
+	}
 	return SecurityConfig{
 		TokenExpiryDays:      getInt(security, "token_expiry_days"),
 		SessionExpirySeconds: getInt(security, "session_expiry_seconds"),
@@ -336,6 +342,8 @@ func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
 		RateLimitWindowSec:   windowSec,
 		MaxTextureWidth:      maxTextureWidth,
 		MaxTextureHeight:     maxTextureHeight,
+		EnableCaptcha:        getBool(security, "enable_captcha"),
+		CaptchaTTL:           captchaTTL,
 	}
 }
 

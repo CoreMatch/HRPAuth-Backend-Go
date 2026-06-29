@@ -1,5 +1,6 @@
 hrpauth
 hrpauth-backend
-docs/*
+docs
 build/*
-.trae/*
+.trae
+references

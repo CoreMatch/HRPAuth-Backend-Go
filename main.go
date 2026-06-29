@@ -55,6 +55,7 @@ func main() {
 	keygenCtrl := controllers.NewKeyGenController()
 	textureCtrl := controllers.NewTextureController()
 	yggdrasilCtrl := controllers.NewYggdrasilController()
+	captchaCtrl := controllers.NewCaptchaController()
 
 	r.GET("/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -91,6 +92,9 @@ func main() {
 
 		api.POST("/texture/upload", textureCtrl.UploadTexture)
 		api.POST("/texture/delete", textureCtrl.DeleteTexture)
+
+		api.POST("/captcha", captchaCtrl.Generate)
+		api.GET("/captcha/image/:token", captchaCtrl.Image)
 		api.POST("/texture/get", textureCtrl.GetTexture)
 	}
 
