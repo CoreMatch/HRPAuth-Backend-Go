@@ -23,7 +23,7 @@ func NewCaptchaService() *CaptchaService {
 		240, // width
 		5,   // noise count
 		base64Captcha.OptionShowHollowLine|base64Captcha.OptionShowSlimeLine|base64Captcha.OptionShowSineLine,
-		4, // length
+		5, // length — keep aligned with frontend Canvas captcha (5 characters)
 		base64Captcha.TxtAlphabet+base64Captcha.TxtNumbers,
 		nil, // bg color (random)
 		nil, // fonts storage (default)

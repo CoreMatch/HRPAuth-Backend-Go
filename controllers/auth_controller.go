@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lnb/HRPAuth-Backend-Go/config"
 	"github.com/lnb/HRPAuth-Backend-Go/database"
 	"github.com/lnb/HRPAuth-Backend-Go/models"
 	"github.com/lnb/HRPAuth-Backend-Go/services"
@@ -138,6 +139,25 @@ func (ac *AuthController) Register(c *gin.Context) {
 			"message": "Password too short",
 		})
 		return
+	}
+
+	// Verify captcha when enabled (fail fast before DB hits)
+	if config.AppConfig.Yggdrasil.Security.EnableCaptcha {
+		captchaService := services.NewCaptchaService()
+		if req.CaptchaToken == "" || req.CaptchaCode == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": "Invalid or expired captcha",
+			})
+			return
+		}
+		if !captchaService.Verify(req.CaptchaToken, req.CaptchaCode) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": "Invalid or expired captcha",
+			})
+			return
+		}
 	}
 
 	var count int64
