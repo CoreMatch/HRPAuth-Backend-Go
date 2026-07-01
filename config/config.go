@@ -254,7 +254,7 @@ func parseYggdrasilConfig(config map[string]interface{}) YggdrasilConfig {
 	yggdrasil, _ := config["yggdrasil"].(map[string]interface{})
 	return YggdrasilConfig{
 		Server:       parseServerConfig(yggdrasil),
-		Security:     parseSecurityConfig(yggdrasil),
+		Security:     parseSecurityConfig(yggdrasil, config),
 		FeatureFlags: parseFeatureFlagsConfig(yggdrasil),
 	}
 }
@@ -312,8 +312,10 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 	}
 }
 
-func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
-	security, _ := config["security"].(map[string]interface{})
+func parseSecurityConfig(yggdrasilConfig map[string]interface{}, topLevelConfig map[string]interface{}) SecurityConfig {
+	security, _ := yggdrasilConfig["security"].(map[string]interface{})
+	// enable_captcha lives at the top-level `security.enable_captcha` (not under `yggdrasil.*`)
+	topSecurity, _ := topLevelConfig["security"].(map[string]interface{})
 	maxAttempts := getInt(security, "rate_limit_max_attempts")
 	if maxAttempts == 0 {
 		maxAttempts = 10
@@ -342,7 +344,7 @@ func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
 		RateLimitWindowSec:   windowSec,
 		MaxTextureWidth:      maxTextureWidth,
 		MaxTextureHeight:     maxTextureHeight,
-		EnableCaptcha:        getBool(security, "enable_captcha"),
+		EnableCaptcha:        getBool(topSecurity, "enable_captcha"),
 		CaptchaTTL:           captchaTTL,
 	}
 }

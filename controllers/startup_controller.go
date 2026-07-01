@@ -88,6 +88,9 @@ func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath st
 			"from_email": "no-reply@samuelcheston.com",
 			"from_name":  "HRPAuth",
 		},
+		"security": map[string]interface{}{
+			"enable_captcha": true,
+		},
 		"yggdrasil": map[string]interface{}{
 			"server": map[string]interface{}{
 				"name":                       "HRPAuth",
@@ -106,7 +109,6 @@ func (sc *StartupController) buildDefaultConfig(publicKeyPath, privateKeyPath st
 				"token_expiry_days":      15,
 				"session_expiry_seconds": 30,
 				"password_cost":          10,
-				"enable_captcha":         true,
 				"captcha_ttl":            300,
 			},
 			"feature_flags": map[string]interface{}{
