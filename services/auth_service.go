@@ -364,7 +364,7 @@ func (as *AuthService) GetSessionByProfileAndServer(profileName, serverID string
 }
 
 func (as *AuthService) IsLoginRateLimited(identifier string) bool {
-	cfg := config.AppConfig.Yggdrasil.Security
+	cfg := config.AppConfig.Security
 	key := fmt.Sprintf("%slogin_attempts:%s", config.AppConfig.Redis.Prefix, identifier)
 
 	ctx := context.Background()
@@ -382,7 +382,7 @@ func (as *AuthService) IsLoginRateLimited(identifier string) bool {
 }
 
 func (as *AuthService) RecordLoginAttempt(identifier string, success bool) {
-	cfg := config.AppConfig.Yggdrasil.Security
+	cfg := config.AppConfig.Security
 	key := fmt.Sprintf("%slogin_attempts:%s", config.AppConfig.Redis.Prefix, identifier)
 	window := time.Duration(cfg.RateLimitWindowSec) * time.Second
 

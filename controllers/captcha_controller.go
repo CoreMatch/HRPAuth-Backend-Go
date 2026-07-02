@@ -19,10 +19,22 @@ func NewCaptchaController() *CaptchaController {
 	}
 }
 
+// Status reports whether captcha verification is enabled. Returns 1 when
+// enabled, 0 when disabled.
+func (cc *CaptchaController) Status(c *gin.Context) {
+	enabled := 0
+	if config.AppConfig.Security.EnableCaptcha {
+		enabled = 1
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"enabled": enabled,
+	})
+}
+
 // Generate issues a new captcha. Returns the token and the URL at which the
 // PNG image can be fetched. The code itself is never returned to clients.
 func (cc *CaptchaController) Generate(c *gin.Context) {
-	if !config.AppConfig.Yggdrasil.Security.EnableCaptcha {
+	if !config.AppConfig.Security.EnableCaptcha {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": "Captcha is disabled",
@@ -43,7 +55,7 @@ func (cc *CaptchaController) Generate(c *gin.Context) {
 		"success":    true,
 		"token":      token,
 		"image_url":  fmt.Sprintf("/captcha/image/%s", token),
-		"expires_in": config.AppConfig.Yggdrasil.Security.CaptchaTTL,
+		"expires_in": config.AppConfig.Security.CaptchaTTL,
 	})
 }
 

@@ -142,7 +142,7 @@ func (ac *AuthController) Register(c *gin.Context) {
 	}
 
 	// Verify captcha when enabled (fail fast before DB hits)
-	if config.AppConfig.Yggdrasil.Security.EnableCaptcha {
+	if config.AppConfig.Security.EnableCaptcha {
 		captchaService := services.NewCaptchaService()
 		if req.CaptchaToken == "" || req.CaptchaCode == "" {
 			c.JSON(http.StatusBadRequest, gin.H{

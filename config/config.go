@@ -12,6 +12,7 @@ type Config struct {
 	Version          string
 	Site             SiteConfig
 	Server           ServerRuntimeConfig
+	Security         SecurityConfig
 	Callback         CallbackConfig
 	Frontend         FrontendConfig
 	KeyGen           KeyGenConfig
@@ -78,7 +79,7 @@ type SMTPConfig struct {
 
 type YggdrasilConfig struct {
 	Server       ServerConfig
-	Security     SecurityConfig
+	Security     YggdrasilSecurityConfig
 	FeatureFlags FeatureFlagsConfig
 }
 
@@ -100,16 +101,23 @@ type LinksConfig struct {
 	Register string
 }
 
+// SecurityConfig is the HRPAuth-specific security settings (registration/login UX).
+// All Yggdrasil-protocol-related security settings live in YggdrasilSecurityConfig.
 type SecurityConfig struct {
-	TokenExpiryDays      int
-	SessionExpirySeconds int
 	PasswordCost         int
 	RateLimitMaxAttempts int
 	RateLimitWindowSec   int
-	MaxTextureWidth      int
-	MaxTextureHeight     int
 	EnableCaptcha        bool
 	CaptchaTTL           int
+}
+
+// YggdrasilSecurityConfig is the Yggdrasil-protocol-related security settings
+// (auth flow durations, texture limits). No HRPAuth-specific fields allowed here.
+type YggdrasilSecurityConfig struct {
+	TokenExpiryDays      int
+	SessionExpirySeconds int
+	MaxTextureWidth      int
+	MaxTextureHeight     int
 }
 
 type FeatureFlagsConfig struct {
@@ -156,6 +164,7 @@ func Load() {
 		Version:          getString(yamlConfig, "version"),
 		Site:             parseSiteConfig(yamlConfig),
 		Server:           parseServerRuntimeConfig(yamlConfig),
+		Security:         parseSecurityConfig(yamlConfig),
 		Callback:         parseCallbackConfig(yamlConfig),
 		Frontend:         parseFrontendConfig(yamlConfig),
 		KeyGen:           parseKeyGenConfig(yamlConfig),
@@ -254,7 +263,7 @@ func parseYggdrasilConfig(config map[string]interface{}) YggdrasilConfig {
 	yggdrasil, _ := config["yggdrasil"].(map[string]interface{})
 	return YggdrasilConfig{
 		Server:       parseServerConfig(yggdrasil),
-		Security:     parseSecurityConfig(yggdrasil, config),
+		Security:     parseYggdrasilSecurityConfig(yggdrasil),
 		FeatureFlags: parseFeatureFlagsConfig(yggdrasil),
 	}
 }
@@ -312,10 +321,9 @@ func parseServerConfig(config map[string]interface{}) ServerConfig {
 	}
 }
 
-func parseSecurityConfig(yggdrasilConfig map[string]interface{}, topLevelConfig map[string]interface{}) SecurityConfig {
-	security, _ := yggdrasilConfig["security"].(map[string]interface{})
-	// enable_captcha lives at the top-level `security.enable_captcha` (not under `yggdrasil.*`)
-	topSecurity, _ := topLevelConfig["security"].(map[string]interface{})
+// parseSecurityConfig parses the top-level `security` section (HRPAuth-specific).
+func parseSecurityConfig(config map[string]interface{}) SecurityConfig {
+	security, _ := config["security"].(map[string]interface{})
 	maxAttempts := getInt(security, "rate_limit_max_attempts")
 	if maxAttempts == 0 {
 		maxAttempts = 10
@@ -324,6 +332,22 @@ func parseSecurityConfig(yggdrasilConfig map[string]interface{}, topLevelConfig 
 	if windowSec == 0 {
 		windowSec = 600
 	}
+	captchaTTL := getInt(security, "captcha_ttl")
+	if captchaTTL == 0 {
+		captchaTTL = 300
+	}
+	return SecurityConfig{
+		PasswordCost:         getInt(security, "password_cost"),
+		RateLimitMaxAttempts: maxAttempts,
+		RateLimitWindowSec:   windowSec,
+		EnableCaptcha:        getBool(security, "enable_captcha"),
+		CaptchaTTL:           captchaTTL,
+	}
+}
+
+// parseYggdrasilSecurityConfig parses the `yggdrasil.security` section (Yggdrasil protocol only).
+func parseYggdrasilSecurityConfig(yggdrasilConfig map[string]interface{}) YggdrasilSecurityConfig {
+	security, _ := yggdrasilConfig["security"].(map[string]interface{})
 	maxTextureWidth := getInt(security, "max_texture_width")
 	if maxTextureWidth == 0 {
 		maxTextureWidth = 1024
@@ -332,20 +356,11 @@ func parseSecurityConfig(yggdrasilConfig map[string]interface{}, topLevelConfig 
 	if maxTextureHeight == 0 {
 		maxTextureHeight = 1024
 	}
-	captchaTTL := getInt(security, "captcha_ttl")
-	if captchaTTL == 0 {
-		captchaTTL = 300
-	}
-	return SecurityConfig{
+	return YggdrasilSecurityConfig{
 		TokenExpiryDays:      getInt(security, "token_expiry_days"),
 		SessionExpirySeconds: getInt(security, "session_expiry_seconds"),
-		PasswordCost:         getInt(security, "password_cost"),
-		RateLimitMaxAttempts: maxAttempts,
-		RateLimitWindowSec:   windowSec,
 		MaxTextureWidth:      maxTextureWidth,
 		MaxTextureHeight:     maxTextureHeight,
-		EnableCaptcha:        getBool(topSecurity, "enable_captcha"),
-		CaptchaTTL:           captchaTTL,
 	}
 }
 

@@ -94,6 +94,7 @@ func main() {
 		api.POST("/texture/delete", textureCtrl.DeleteTexture)
 
 		api.POST("/captcha", captchaCtrl.Generate)
+		api.GET("/captcha/enabled", captchaCtrl.Status)
 		api.GET("/captcha/image/:token", captchaCtrl.Image)
 		api.POST("/texture/get", textureCtrl.GetTexture)
 	}

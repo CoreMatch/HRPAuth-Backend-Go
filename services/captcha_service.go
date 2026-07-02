@@ -38,7 +38,7 @@ func (cs *CaptchaService) captchaKey(token string) string {
 }
 
 func (cs *CaptchaService) ttl() time.Duration {
-	return time.Duration(config.AppConfig.Yggdrasil.Security.CaptchaTTL) * time.Second
+	return time.Duration(config.AppConfig.Security.CaptchaTTL) * time.Second
 }
 
 // Generate creates a new captcha and stores its code in Redis.
